@@ -68,6 +68,20 @@ def openai_embedding(text_list: list[str], source: str):
     return vectors
 
 
+def process_in_batches(contents, batch_size=100):
+    embedding_vectors = []
+    for i in range(0, len(contents), batch_size):
+        batch = contents[i : i + batch_size]
+        embedding_vector = openai_embedding(
+            text_list=batch, source=file_name_without_ext
+        )
+        index.upsert(
+            vectors=embedding_vector,
+        )
+        embedding_vectors.extend(embedding_vector)
+    return embedding_vectors
+
+
 directory = "water"
 
 # 遍历目录中的所有 .docx 文件
@@ -81,10 +95,5 @@ for file_path in glob.glob(os.path.join(directory, "*.docx")):
     # 提取标题和内容
     contents = extract_text(doc)
 
-    embedding_vectors = openai_embedding(
-        text_list=contents, source=file_name_without_ext
-    )
-
-    upsert_response = index.upsert(
-        vectors=embedding_vectors,
-    )
+    embedding_vectors = process_in_batches(contents)
+    
