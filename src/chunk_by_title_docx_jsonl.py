@@ -1,73 +1,21 @@
-import glob
 import json
-import os
-import re
 
-import requests
 from docx import Document
-from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_fixed
-
-load_dotenv()
-
-plugin_key = os.getenv("PLUGIN_KEY")
 
 
-@retry(wait=wait_fixed(3), stop=stop_after_attempt(30))
-def text_upsert(
-    text_input,
-    # key_input,
-    source_input,
-    # source_id_input,
-    # url_input,
-    # created_at_input,
-    # author_input,
-):
-    url = "https://waterplugin.tiangong.world/upsert"
-
-    headers = {
-        "Authorization": f"Bearer {plugin_key}",
-        "accept": "application/json",
-        "Content-Type": "application/json",
-    }
-
-    data = {
-        "documents": [
-            {
-                # "id": key_input,
-                "text": text_input,
-                "metadata": {
-                    "source": source_input,
-                    # "source_id": source_id_input,
-                    # "url": url_input,
-                    # "created_at": created_at_input,
-                    # "author": author_input,
-                },
-            }
-        ]
-    }
-
-    data_string = json.dumps(data)
-
-    response = requests.request("POST", url, headers=headers, data=data_string)
-    response.raise_for_status()
-
-    return response
-
-
-def extract_text(docx):
+def extract_text(doc):
     # 初始化当前标题和内容
     current_heading = None
     content = []
 
-    # 最终存储的列表
-    combined_content = []
+    # 存储标题和内容的字典
+    headings_with_content = {}
 
-    for paragraph in docx.paragraphs:
+    for paragraph in doc.paragraphs:
         if paragraph.style.name == "Heading 2":
-            # 如果当前已有标题，将其及其内容作为一个元素添加到列表中
+            # 如果当前已有标题和内容，存储它们
             if current_heading:
-                combined_content.append(current_heading + "\n" + "\n".join(content))
+                headings_with_content[current_heading] = "\n".join(content)
 
             # 更新当前标题和重置内容
             current_heading = paragraph.text
@@ -76,29 +24,44 @@ def extract_text(docx):
             # 如果不是标题，添加到内容中
             content.append(paragraph.text)
 
-    # 确保最后一个标题及其内容也被添加
+    # 确保最后一个标题的内容也被添加
     if current_heading:
-        combined_content.append(current_heading + "\n" + "\n".join(content))
+        headings_with_content[current_heading] = "\n".join(content)
 
-    return combined_content
+    return headings_with_content
 
 
-directory = "water"
+file_name = "MFA/book2-1-3.docx"
+# 打开Word文档
+doc = Document(file_name)
 
-# 遍历目录中的所有 .docx 文件
-for file_path in glob.glob(os.path.join(directory, "*.docx")):
-    # 获取文件名（不含后缀）
-    file_name = os.path.basename(file_path)
-    file_name_without_ext = re.split(r"\.docx$", file_name)[0]
+# 提取标题和内容
+headings_content = extract_text(doc)
 
-    # 打开Word文档
-    doc = Document(file_path)
-    # 提取标题和内容
-    contents = extract_text(doc)
 
-    for content in contents:
-        text_upsert(
-            text_input=content,
-            source_input=file_name_without_ext,
-        )
-        print(content)
+system_content = "You are a world class expert in water treatment."
+
+jsonl_data = []
+
+for user_content, assistant_content in headings_content.items():
+    # 创建单个JSON对象
+    json_object = {
+        "messages": [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": assistant_content},
+        ]
+    }
+    # 添加到列表
+    jsonl_data.append(json.dumps(json_object))
+
+# 将每个JSON对象转换为单行
+jsonl_formatted_data = "\n".join(jsonl_data)
+
+decoded_jsonl_data = jsonl_formatted_data.encode().decode("unicode_escape")
+
+# 输出结果
+print(decoded_jsonl_data)
+
+with open("book.jsonl", "w") as f:
+    f.write(jsonl_formatted_data)
