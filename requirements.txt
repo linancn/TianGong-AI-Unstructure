@@ -1,1 +1,4 @@
+openai
+python-dotenv
+tenacity
 unstructured[all-docs]
