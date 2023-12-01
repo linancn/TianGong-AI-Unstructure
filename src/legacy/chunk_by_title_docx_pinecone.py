@@ -1,14 +1,15 @@
 import glob
+import json
 import os
 import re
 import uuid
 
 import pinecone
+import requests
+from docx import Document
 from dotenv import load_dotenv
 from openai import OpenAI
-from unstructured.chunking.title import chunk_by_title
-from unstructured.documents.elements import CompositeElement, Table
-from unstructured.partition.docx import partition_docx
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 load_dotenv()
 
@@ -21,6 +22,34 @@ pinecone_index = os.getenv("PINECONE_INDEX")
 
 pinecone.init(api_key=pinecone_api_key, environment=pinecone_environment)
 index = pinecone.Index(pinecone_index)
+
+
+def extract_text(docx):
+    # 初始化当前标题和内容
+    current_heading = None
+    content = []
+
+    # 最终存储的列表
+    combined_content = []
+
+    for paragraph in docx.paragraphs:
+        if paragraph.style.name == "Heading 2":
+            # 如果当前已有标题，将其及其内容作为一个元素添加到列表中
+            if current_heading:
+                combined_content.append(current_heading + "\n" + "\n".join(content))
+
+            # 更新当前标题和重置内容
+            current_heading = paragraph.text
+            content = []
+        else:
+            # 如果不是标题，添加到内容中
+            content.append(paragraph.text)
+
+    # 确保最后一个标题及其内容也被添加
+    if current_heading:
+        combined_content.append(current_heading + "\n" + "\n".join(content))
+
+    return combined_content
 
 
 def openai_embedding(text_list: list[str], source: str):
@@ -53,43 +82,18 @@ def process_in_batches(contents, batch_size=100):
     return embedding_vectors
 
 
-def extract_text(file_name: str):
-    elements = partition_docx(
-        filename=file_name,
-        multipage_sections=True,
-        infer_table_structure=True,
-        include_page_breaks=False,
-    )
-
-    chunks = chunk_by_title(
-        elements=elements,
-        multipage_sections=True,
-        combine_text_under_n_chars=0,
-        new_after_n_chars=None,
-        max_characters=4096,
-    )
-
-    text_list = []
-
-    for chunk in chunks:
-        if isinstance(chunk, CompositeElement):
-            text = chunk.text
-            text_list.append(text)
-        elif isinstance(chunk, Table):
-            if text_list:
-                text_list[-1] = text_list[-1] + "\n" + chunk.text
-            else:
-                text_list.append(chunk.text)
-
-    return text_list
-
-
 directory = "water"
 
+# 遍历目录中的所有 .docx 文件
 for file_path in glob.glob(os.path.join(directory, "*.docx")):
+    # 获取文件名（不含后缀）
     file_name = os.path.basename(file_path)
     file_name_without_ext = re.split(r"\.docx$", file_name)[0]
 
-    contents = extract_text(file_path)
+    # 打开Word文档
+    doc = Document(file_path)
+    # 提取标题和内容
+    contents = extract_text(doc)
 
     embedding_vectors = process_in_batches(contents)
+    
