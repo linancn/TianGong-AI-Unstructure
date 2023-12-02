@@ -2,7 +2,6 @@ import glob
 import os
 import re
 import uuid
-from ast import Dict, List
 
 import pinecone
 from dotenv import load_dotenv
@@ -24,15 +23,13 @@ pinecone.init(api_key=pinecone_api_key, environment=pinecone_environment)
 index = pinecone.Index(pinecone_index)
 
 
-def openai_embedding(text_list, source: str):
-    keys_list = [list(d.keys())[0] for d in text_list]
-    value_list = [list(d.values())[0] for d in text_list]
+def openai_embedding(text_list: list[str], source: str):
     response = client.embeddings.create(
-        input=keys_list,
+        input=text_list,
         model="text-embedding-ada-002",
     )
     vectors = []
-    for text, embedding in zip(value_list, response.data):
+    for text, embedding in zip(text_list, response.data):
         vector = {
             "id": str(uuid.uuid4()),
             "values": embedding.embedding,
@@ -83,13 +80,8 @@ def extract_text(file_name: str):
                 text_list[-1] = text_list[-1] + "\n" + chunk.text
             else:
                 text_list.append(chunk.text)
-    result_list = []
-    for text in text_list:
-        split_text = text.split("\n\n", 1)
-        if len(split_text) == 2:
-            title, _ = split_text
-        result_list.append({title: text})
-    return result_list
+
+    return text_list
 
 
 directory = "water"
