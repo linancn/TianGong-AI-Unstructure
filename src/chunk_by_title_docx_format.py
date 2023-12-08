@@ -87,6 +87,7 @@ def extract_text(file_name: str):
     return result_list
 
 
-file_name = "raw/谢经良. 污水处理设备操作维护问答. 化学工业出版社, 2012.docx"
+file_name = "raw/Book2-rest.docx"
 contents = extract_text(file_name)
 generate_docx(contents)
+print("脚本运行完成")

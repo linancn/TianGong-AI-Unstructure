@@ -80,9 +80,9 @@ def extract_text(file_name: str):
             text_list.append(text)
         elif isinstance(chunk, Table):
             if text_list:
-                text_list[-1] = text_list[-1] + "\n" + chunk.text
+                text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
             else:
-                text_list.append(chunk.text)
+                text_list.append(chunk.hunk.metadata.text_as_html)
     result_list = []
     for text in text_list:
         split_text = text.split("\n\n", 1)
