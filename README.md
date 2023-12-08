@@ -25,12 +25,13 @@ pip install -r requirements.txt --upgrade
 ```
 
 ```bash
+sudo apt update
 sudo apt install python3.11-dev
-sudo apt install libmagic-dev
-sudo apt install poppler-utils
-sudo apt install tesseract-ocr
-sudo apt install libreoffice
-sudo apt install pandoc
+sudo apt install -y libmagic-dev
+sudo apt install -y poppler-utils
+sudo apt install -y tesseract-ocr
+sudo apt install -y libreoffice
+sudo apt install -y pandoc
 ```
 
 Install Cuda (optional):
