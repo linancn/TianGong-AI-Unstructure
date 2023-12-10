@@ -1,13 +1,14 @@
+from dataclasses import dataclass
+
 from unstructured.chunking.title import chunk_by_title
-from unstructured.partition.auto import partition
-from unstructured.documents.elements import Text, ElementMetadata
 from unstructured.cleaners.core import (
     clean,
-    group_broken_paragraphs,
     clean_ordered_bullets,
+    group_broken_paragraphs,
     remove_punctuation,
 )
-from dataclasses import dataclass
+from unstructured.documents.elements import ElementMetadata, Footer, Header, Text
+from unstructured.partition.auto import partition
 
 pdf_name = "raw/BYD_CSR_2022.pdf"
 
@@ -21,7 +22,7 @@ elements = partition(
 filtered_elements = [
     element
     for element in elements
-    if not (isinstance(element, Text) and (element.category == "Header" or "Footer"))
+    if not (isinstance(element, Header) or isinstance(element, Footer))
 ]
 
 for element in filtered_elements:
