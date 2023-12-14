@@ -24,7 +24,7 @@ def vision_completion(image_path: str) -> str:
                 "content": [
                     {
                         "type": "text",
-                        "text": "What’s in this image? Only return neat facts in English.",
+                        "text": "What is in this image? Only return neat facts in English.",
                     },
                     {
                         "type": "image_url",

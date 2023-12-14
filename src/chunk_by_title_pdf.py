@@ -1,16 +1,18 @@
 import tempfile
-
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import (
     clean,
     group_broken_paragraphs,
 )
-from unstructured.documents.elements import Footer, Header, Image, Text
+from unstructured.documents.elements import Footer, Header, Image, CompositeElement, Table
 from unstructured.partition.auto import partition
-
 from tools.vision import vision_completion
 
+
 pdf_name = "raw/BYD_CSR_2022.pdf"
+
+min_image_width = 250
+min_image_height = 270
 
 elements = partition(
     filename=pdf_name,
@@ -37,8 +39,12 @@ for element in filtered_elements:
             trailing_punctuation=False,
         )
     elif isinstance(element, Image):
-        element.text = vision_completion(element.metadata.image_path)
-
+        point1 = element.metadata.coordinates.points[0]
+        point2 = element.metadata.coordinates.points[2]
+        width = abs(point2[0] - point1[0])
+        height = abs(point2[1] - point1[1])
+        if width >= min_image_width and height >= min_image_height:
+            element.text = vision_completion(element.metadata.image_path)
 
 chunks = chunk_by_title(
     elements=filtered_elements,
@@ -48,7 +54,25 @@ chunks = chunk_by_title(
     max_characters=4096,
 )
 
+text_list = []
 for chunk in chunks:
-    print(chunk)
+    if isinstance(chunk, CompositeElement):
+        text = chunk.text
+        text_list.append(text)
+    elif isinstance(chunk, Table):
+        if text_list:
+            text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
+        else:
+            text_list.append(chunk.hunk.metadata.text_as_html)
+result_list = []
+
+for text in text_list:
+    split_text = text.split("\n\n", 1)
+    if len(split_text) == 2:
+        title, body = split_text
+    result_list.append({title: body})
+
+for result in result_list:
+    print(result)
     print("\n\n" + "-" * 80)
     input()
