@@ -1,15 +1,20 @@
 import tempfile
+
+import pandas as pd
 from unstructured.chunking.title import chunk_by_title
-from unstructured.cleaners.core import (
-    clean,
-    group_broken_paragraphs,
+from unstructured.cleaners.core import clean, group_broken_paragraphs
+from unstructured.documents.elements import (
+    CompositeElement,
+    Footer,
+    Header,
+    Image,
+    Table,
 )
-from unstructured.documents.elements import Footer, Header, Image, CompositeElement, Table
 from unstructured.partition.auto import partition
+
 from tools.vision import vision_completion
 
-
-pdf_name = "raw/BYD_CSR_2022.pdf"
+pdf_name = "raw/Nissan_SR_2021(1).pdf"
 
 min_image_width = 250
 min_image_height = 270
@@ -38,13 +43,13 @@ for element in filtered_elements:
             dashes=False,
             trailing_punctuation=False,
         )
-    elif isinstance(element, Image):
-        point1 = element.metadata.coordinates.points[0]
-        point2 = element.metadata.coordinates.points[2]
-        width = abs(point2[0] - point1[0])
-        height = abs(point2[1] - point1[1])
-        if width >= min_image_width and height >= min_image_height:
-            element.text = vision_completion(element.metadata.image_path)
+    # elif isinstance(element, Image):
+    #     point1 = element.metadata.coordinates.points[0]
+    #     point2 = element.metadata.coordinates.points[2]
+    #     width = abs(point2[0] - point1[0])
+    #     height = abs(point2[1] - point1[1])
+    #     if width >= min_image_width and height >= min_image_height:
+    #         element.text = vision_completion(element.metadata.image_path)
 
 chunks = chunk_by_title(
     elements=filtered_elements,
@@ -63,16 +68,21 @@ for chunk in chunks:
         if text_list:
             text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
         else:
-            text_list.append(chunk.hunk.metadata.text_as_html)
+            text_list.append(chunk.metadata.text_as_html)
 result_list = []
 
 for text in text_list:
     split_text = text.split("\n\n", 1)
     if len(split_text) == 2:
         title, body = split_text
-    result_list.append({title: body})
+        result_list.append({"title": title, "body": body})
 
-for result in result_list:
-    print(result)
-    print("\n\n" + "-" * 80)
-    input()
+df = pd.DataFrame(result_list)
+print(df)
+df.to_excel("output.xlsx", index=True, header=True)
+
+
+# for result in result_list:
+#     print(result)
+#     print("\n\n" + "-" * 80)
+#     input()
