@@ -14,7 +14,7 @@ from unstructured.partition.auto import partition
 
 from tools.vision import vision_completion
 
-pdf_name = "raw/Nissan_SR_2021(1).pdf"
+pdf_name = "raw/3.8-cutoff-20927-14.pdf"
 
 min_image_width = 250
 min_image_height = 270
@@ -66,7 +66,7 @@ for chunk in chunks:
         text_list.append(text)
     elif isinstance(chunk, Table):
         if text_list:
-            text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
+            text_list[-1] = text_list[-1] + "\n\n" + chunk.metadata.text_as_html
         else:
             text_list.append(chunk.metadata.text_as_html)
 result_list = []

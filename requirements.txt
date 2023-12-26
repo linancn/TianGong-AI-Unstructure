@@ -3,3 +3,4 @@ pinecone-client
 python-dotenv
 tenacity
 unstructured[all-docs]
+xata
