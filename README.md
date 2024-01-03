@@ -34,10 +34,10 @@ sudo apt install -y libreoffice
 sudo apt install -y pandoc
 ```
 
-Install Cuda (optional):
+Test Cuda (optional):
 
 ```bash
-sudo apt install nvidia-cuda-toolkit
+nvidia-smi
 ```
 
 ```
