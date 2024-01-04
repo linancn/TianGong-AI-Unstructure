@@ -9,7 +9,7 @@ def unlock_file(file):
     pdf.save(file)
 
 
-def unlock_directory(folder="download"):
+def unlock_directory(folder="new"):
     os.chdir(folder)
     filelist = os.listdir()
     for file in filelist:
