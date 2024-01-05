@@ -41,5 +41,9 @@ def process_pdf(record):
 
 # process_pdf(record)
 
-with concurrent.futures.ProcessPoolExecutor() as executor:
+# for record in records:
+#     process_pdf(record)
+
+with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
     executor.map(process_pdf, records)
+
