@@ -3,5 +3,6 @@ pinecone-client
 PyPDF2
 python-dotenv
 tenacity
+tiktoken
 unstructured[all-docs]
 xata
