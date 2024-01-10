@@ -147,6 +147,7 @@ dmypy.json
 .pytype/
 
 MFA/
+MFA_OUTPUT
 water/
 raw/
 datareport/

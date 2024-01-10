@@ -1,3 +1,4 @@
+import os
 import tempfile
 
 from unstructured.chunking.title import chunk_by_title
@@ -44,6 +45,10 @@ def check_misc(text):
     if text in keywords_for_misc:
         return True
 
+def extract_filename(path):
+    base_name = os.path.basename(path)
+    file_name, _ = os.path.splitext(base_name)
+    return file_name
 
 def sci_chunk(pdf_path, vision=False):
     # 图像的最小尺寸要求
@@ -112,4 +117,9 @@ def sci_chunk(pdf_path, vision=False):
             else:
                 text_list.append(chunk.hunk.metadata.text_as_html)
 
-    return text_list
+    with open(f"MFA_OUTPUT/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8") as f:
+        for item in text_list:
+            f.write("-----------------------------------\n")
+            f.write("%s\n" % item)
+
+    # return text_list
