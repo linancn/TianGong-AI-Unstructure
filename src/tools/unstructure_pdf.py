@@ -58,8 +58,8 @@ def unstructure_pdf(pdf_name, extract_images=False):
     chunks = chunk_by_title(
         elements=filtered_elements,
         multipage_sections=True,
-        combine_text_under_n_chars=0,
-        new_after_n_chars=None,
+        combine_text_under_n_chars=100,
+        new_after_n_chars=512,
         max_characters=4096,
     )
 
