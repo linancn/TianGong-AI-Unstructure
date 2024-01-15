@@ -16,6 +16,6 @@ record_ids = set([record["id"] for record in records])
 
 download_files = set(os.path.splitext(file)[0] for file in os.listdir("pickle"))
 
-missing_in_download = record_ids- download_files
+missing_in_download = record_ids - download_files
 
 print(f"Missing in download: {len(missing_in_download)}")
