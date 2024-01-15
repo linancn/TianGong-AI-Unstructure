@@ -4,6 +4,7 @@ import pickle
 import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
+from tenacity import retry, stop_after_attempt, wait_fixed
 from xata import XataClient
 from xata.helpers import BulkProcessor
 
@@ -21,6 +22,11 @@ xata = XataClient(
 bp = BulkProcessor(client=xata, batch_size=500)
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def bp_put_records(records):
+    bp.put_records("ESG_Embeddings", records)
+
+
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding("cl100k_base")
@@ -28,9 +34,16 @@ def num_tokens_from_string(string: str) -> int:
     return num_tokens
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(text_list, model="text-embedding-ada-002"):
     text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
-    return client.embeddings.create(input=text_list, model=model).data
+    length = len(data)
+    results = []
+    for i in range(0, length, 1000):
+        results.append(
+            client.embeddings.create(input=text_list[i : i + 1000], model=model).data
+        )
+    return sum(results, [])
 
 
 def load_pickle_list(file_path):
@@ -75,5 +88,5 @@ for file in os.listdir(dir):
             }
         )
 
-    bp.put_records("ESG_Embeddings", datalist)
+    bp_put_records(datalist)
     print(f"{file_id} embedding finished.")
