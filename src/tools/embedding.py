@@ -18,7 +18,7 @@ xata = XataClient(
     api_key=xata_api_key,
     db_url=xata_db_url,
 )
-bp = BulkProcessor(client=xata, batch_size=1000)
+bp = BulkProcessor(client=xata, batch_size=500)
 
 
 def num_tokens_from_string(string: str) -> int:
