@@ -20,10 +20,12 @@ def check_misc(text):
     keywords_for_misc = [
         "ACKNOWLEDGEMENTS",
         "ACKNOWLEDGMENTS",
+        "ACKNOWLEDGEMENT",
+        "ACKNOWLEDGMENT",
         "BIBLIOGRAPHY",
         "DATAAVAILABILITY",
         "DECLARATIONOFCOMPETINGINTEREST",
-        "ONLINE",
+        # "ONLINE",
         "REFERENCES",
         "SUPPLEMENTARYINFORMATION",
         "SUPPLEMENTARYMATERIALS",
@@ -42,13 +44,17 @@ def check_misc(text):
     text = text.replace("：", "")
     text = text.upper()
 
-    if text in keywords_for_misc:
+    if text in keywords_for_misc or any(
+        keyword in text for keyword in keywords_for_misc
+    ):
         return True
+
 
 def extract_filename(path):
     base_name = os.path.basename(path)
     file_name, _ = os.path.splitext(base_name)
     return file_name
+
 
 def sci_chunk(pdf_path, vision=False):
     # 图像的最小尺寸要求
@@ -117,7 +123,9 @@ def sci_chunk(pdf_path, vision=False):
             else:
                 text_list.append(chunk.hunk.metadata.text_as_html)
 
-    with open(f"MFA_OUTPUT/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8") as f:
+    with open(
+        f"MFA_OUTPUT/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8"
+    ) as f:
         for item in text_list:
             f.write("-----------------------------------\n")
             f.write("%s\n" % item)

@@ -10,11 +10,14 @@ pdf_names = [os.path.join(directory, name) for name in os.listdir(directory)]
 
 # for pdf_name in pdf_names:
 #     sci_chunk(pdf_name)
-start_time = time.time()
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
-    executor.map(sci_chunk, pdf_names)
+sci_chunk("MFA/2021 High-Resolution Maps of Material Stocks.pdf")
 
-end_time = time.time()
+# start_time = time.time()
 
-print(f"Execution time: {end_time - start_time} seconds")
+# with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
+#     executor.map(sci_chunk, pdf_names)
+
+# end_time = time.time()
+
+# print(f"Execution time: {end_time - start_time} seconds")
