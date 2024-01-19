@@ -124,7 +124,7 @@ def sci_chunk(pdf_path, vision=False):
                 text_list.append(chunk.hunk.metadata.text_as_html)
 
     with open(
-        f"MFA_OUTPUT/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8"
+        f"docs_output/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8"
     ) as f:
         for item in text_list:
             f.write("-----------------------------------\n")

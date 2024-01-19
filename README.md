@@ -81,4 +81,7 @@ sudo nginx -s reload
 sudo nginx -s stop
 ```
 
-## To Do
+## OCR model path
+
+https://github.com/tesseract-ocr/tessdata/blob/main/chi_sim.traineddata
+/usr/share/tesseract-ocr/4.00/tessdata
