@@ -61,7 +61,7 @@ def merge_pickle_list(data):
     return result
 
 
-dir = "pickle1"
+dir = "pickle"
 
 for file in os.listdir(dir):
     datalist = []
@@ -86,4 +86,6 @@ for file in os.listdir(dir):
     for i in range(0, n, 1000):
         batch = datalist[i : i + 1000]
         result = xata.records().bulk_insert("ESG_Embeddings", {"records": batch})
-        print(f"{file_id} embedding finished for batch starting at index {i}.")
+        print(
+            f"{file_id} embedding finished for batch starting at index {i}.", flush=True
+        )

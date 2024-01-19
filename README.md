@@ -85,3 +85,8 @@ sudo nginx -s stop
 
 https://github.com/tesseract-ocr/tessdata/blob/main/chi_sim.traineddata
 /usr/share/tesseract-ocr/4.00/tessdata
+
+## Run in Background
+```bash
+nohup .venv/bin/python3.11 src/tools/embedding.py > log.txt 2>&1 &
+```
