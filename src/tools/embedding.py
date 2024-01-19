@@ -19,12 +19,6 @@ xata = XataClient(
     api_key=xata_api_key,
     db_url=xata_db_url,
 )
-bp = BulkProcessor(client=xata, batch_size=500)
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def bp_put_records(records):
-    bp.put_records("ESG_Embeddings", records)
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -67,7 +61,7 @@ def merge_pickle_list(data):
     return result
 
 
-dir = "pickle"
+dir = "pickle1"
 
 for file in os.listdir(dir):
     datalist = []
@@ -88,5 +82,8 @@ for file in os.listdir(dir):
             }
         )
 
-    bp_put_records(datalist)
-    print(f"{file_id} embedding finished.")
+    n = len(datalist)
+    for i in range(0, n, 1000):
+        batch = datalist[i : i + 1000]
+        result = xata.records().bulk_insert("ESG_Embeddings", {"records": batch})
+        print(f"{file_id} embedding finished for batch starting at index {i}.")
