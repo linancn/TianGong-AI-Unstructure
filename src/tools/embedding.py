@@ -30,14 +30,20 @@ def num_tokens_from_string(string: str) -> int:
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(text_list, model="text-embedding-ada-002"):
-    text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
-    length = len(data)
-    results = []
-    for i in range(0, length, 1000):
-        results.append(
-            client.embeddings.create(input=text_list[i : i + 1000], model=model).data
-        )
-    return sum(results, [])
+    try:
+        text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
+        length = len(data)
+        results = []
+        for i in range(0, length, 1000):
+            results.append(
+                client.embeddings.create(
+                    input=text_list[i : i + 1000], model=model
+                ).data
+            )
+        return sum(results, [])
+
+    except Exception as e:
+        print(e)
 
 
 def load_pickle_list(file_path):
@@ -92,10 +98,10 @@ for file in os.listdir(dir):
         )
 
     n = len(datalist)
-    for i in range(0, n, 1000):
-        batch = datalist[i : i + 1000]
+    for i in range(0, n, 500):
+        batch = datalist[i : i + 500]
         result = xata.records().bulk_insert("ESG_Embeddings", {"records": batch})
         print(
-            f"{file_id} embedding finished for batch starting at index {i}.",
+            f"{file_id} embedding finished for batch starting at index {i}, with status_code: {result.status_code}",
             flush=True,
         )
