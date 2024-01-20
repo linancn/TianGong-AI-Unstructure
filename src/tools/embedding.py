@@ -28,6 +28,14 @@ def num_tokens_from_string(string: str) -> int:
     return num_tokens
 
 
+def fix_utf8(original_list):
+    cleaned_list = []
+    for original_str in original_list:
+        cleaned_str = original_str.replace("\ufffd", " ")
+        cleaned_list.append(cleaned_str)
+    return cleaned_list
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(text_list, model="text-embedding-ada-002"):
     try:
@@ -83,6 +91,7 @@ for file in os.listdir(dir):
     file_path = os.path.join(dir, file)
     data = load_pickle_list(file_path)
     data = merge_pickle_list(data)
+    data = fix_utf8(data)
     embeddings = get_embeddings(data)
 
     file_id = file.split(".")[0]
