@@ -2,11 +2,11 @@ import os
 import pickle
 
 import tiktoken
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_fixed
 from xata import XataClient
-from xata.helpers import BulkProcessor
 
 load_dotenv()
 
@@ -50,7 +50,14 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        if num_tokens_from_string(d) < 15:
+        if len(d) > 8000:
+            soup = BeautifulSoup(d, "html.parser")
+            tables = soup.find_all("table")
+            for table in tables:
+                table_content = str(table)
+                if table_content:  # 确保表格内容不为空
+                    result.append(table_content)
+        elif num_tokens_from_string(d) < 15:
             temp += d + " "
         else:
             result.append(temp + d)
@@ -62,6 +69,8 @@ def merge_pickle_list(data):
 
 
 dir = "pickle"
+
+aa = os.listdir(dir)
 
 for file in os.listdir(dir):
     datalist = []
@@ -87,5 +96,6 @@ for file in os.listdir(dir):
         batch = datalist[i : i + 1000]
         result = xata.records().bulk_insert("ESG_Embeddings", {"records": batch})
         print(
-            f"{file_id} embedding finished for batch starting at index {i}.", flush=True
+            f"{file_id} embedding finished for batch starting at index {i}.",
+            flush=True,
         )
