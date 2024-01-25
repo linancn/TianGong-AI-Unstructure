@@ -1,6 +1,9 @@
 import os
 import tempfile
 
+from dotenv import load_dotenv
+from openai import OpenAI
+from pinecone import Pinecone
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import clean, group_broken_paragraphs
 from unstructured.documents.elements import (
@@ -12,8 +15,50 @@ from unstructured.documents.elements import (
     Title,
 )
 from unstructured.partition.auto import partition
+from xata.client import XataClient
 
 from tools.vision import vision_completion
+
+load_dotenv()
+
+client = OpenAI()
+
+xata_api_key = os.getenv("XATA_API_KEY")
+xata_db_url = os.getenv("XATA_DOCS_DB_URL")
+xata = XataClient(api_key=xata_api_key, db_url=xata_db_url)
+
+pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
+idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
+
+
+def get_doi(pdf_path):
+    doi = pdf_path[14:-4]
+    return doi
+
+
+def fix_utf8(original_list):
+    cleaned_list = []
+    for original_str in original_list:
+        cleaned_str = original_str.replace("\ufffd", " ")
+        cleaned_list.append(cleaned_str)
+    return cleaned_list
+
+
+def get_embeddings(text_list, model="text-embedding-ada-002"):
+    try:
+        text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
+        length = len(text_list)
+        results = []
+        for i in range(0, length, 1000):
+            results.append(
+                client.embeddings.create(
+                    input=text_list[i : i + 1000], model=model
+                ).data
+            )
+        return sum(results, [])
+
+    except Exception as e:
+        print(e)
 
 
 def check_misc(text):
@@ -134,4 +179,24 @@ def sci_chunk(pdf_path, vision=False):
     #         f.write("-----------------------------------\n")
     #         f.write("%s\n" % item)
 
-    return text_list
+    data = fix_utf8(text_list)
+    embeddings = get_embeddings(data)
+
+    doi = get_doi(pdf_path)
+    vectors = []
+    for index, item in enumerate(data):
+        vectors.append(
+            {
+                "id": doi + "_" + str(index),
+                "values": embeddings[index].embedding,
+                "metadata": {"text": item},
+            }
+        )
+
+    idx.upsert(vectors=vectors, batch_size=100, namespace="sci", show_progress=False)
+
+    xata.sql().query(
+        'UPDATE "journals" SET "embedding_time" = NOW() WHERE doi = $1', [doi]
+    )
+
+    print(f"Finished {pdf_path}")

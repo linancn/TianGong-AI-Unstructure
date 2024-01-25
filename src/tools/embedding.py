@@ -40,7 +40,7 @@ def fix_utf8(original_list):
 def get_embeddings(text_list, model="text-embedding-ada-002"):
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
-        length = len(data)
+        length = len(text_list)
         results = []
         for i in range(0, length, 1000):
             results.append(
