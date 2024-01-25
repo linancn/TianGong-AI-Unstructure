@@ -4,14 +4,15 @@ import time
 
 from tools.chunk_by_sci_pdf import sci_chunk
 
-directory = "docs/10.1002"
+directory = "docs/journals/10.1002"
 
 pdf_names = [os.path.join(directory, name) for name in os.listdir(directory)]
 
+pdf_names = pdf_names[0:100]
 # for pdf_name in pdf_names:
 #     sci_chunk(pdf_name)
 
-# sci_chunk("MFA/2014-GEC-The role of in-use stocks in the social metabolism and in climate.pdf")
+sci_chunk("docs/journals/10.1002/aenm.201190011.pdf")
 
 # pdf_names = pdf_names[0:100]
 

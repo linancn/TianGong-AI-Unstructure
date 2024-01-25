@@ -123,11 +123,15 @@ def sci_chunk(pdf_path, vision=False):
             else:
                 text_list.append(chunk.hunk.metadata.text_as_html)
 
-    with open(
-        f"docs_output/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8"
-    ) as f:
-        for item in text_list:
-            f.write("-----------------------------------\n")
-            f.write("%s\n" % item)
+    if len(text_list) >= 2 and len(text_list[-1]) < 10:
+        text_list[-2] = text_list[-2] + " " + text_list[-1]
+        text_list = text_list[:-1]
 
-    # return text_list
+    # with open(
+    #     f"docs_output/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8"
+    # ) as f:
+    #     for item in text_list:
+    #         f.write("-----------------------------------\n")
+    #         f.write("%s\n" % item)
+
+    return text_list
