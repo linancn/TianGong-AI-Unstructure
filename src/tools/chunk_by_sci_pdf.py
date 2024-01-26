@@ -44,7 +44,7 @@ def fix_utf8(original_list):
     return cleaned_list
 
 
-def get_embeddings(text_list, model="text-embedding-ada-002"):
+def get_embeddings(text_list, model="text-embedding-3-small"):
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
