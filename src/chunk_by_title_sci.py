@@ -16,7 +16,7 @@ def get_contained_list(list1, list2):
 
 
 table_name = "journals"
-columns = ["doi"]
+columns = ["doi", "journal", "date"]
 filter = {
     "$all": [
         {"$exists": "upload_time"},
@@ -58,13 +58,18 @@ def get_all_records(
 
 all_records = get_all_records(xata, table_name, columns, filter)
 
-# directory = "docs/journals"
+pdf_list = []
+for record in all_records:
+    pdf_list.append(
+        {
+            "pdf_path": "docs/journals/" + record["doi"] + ".pdf",
+            "journal": record["journal"],
+            "date": record["date"],
+        }
+    )
 
-# pdf_names = []
-# for dirpath, dirnames, filenames in os.walk(directory):
-#     for filename in filenames:
-#         pdf_names.append(os.path.join(dirpath, filename))
-
+# for pdf in pdf_list:
+#     sci_chunk(pdf)
 
 # pdf_files = get_contained_list(all_records, pdf_names)
 # # pdf_names = pdf_names[0:100]
@@ -75,12 +80,11 @@ all_records = get_all_records(xata, table_name, columns, filter)
 
 # sci_chunk("docs/journals/10.1007/s11356-022-21798-3.pdf")
 
-# pdf_names = pdf_names[0:100]
 
 start_time = time.time()
 
 with concurrent.futures.ProcessPoolExecutor(16) as executor:
-    executor.map(sci_chunk, jie_pdf_names)
+    executor.map(sci_chunk, pdf_list)
 
 end_time = time.time()
 

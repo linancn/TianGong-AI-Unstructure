@@ -1,5 +1,6 @@
+arrow
 openai
-pinecone-client==3.0.0.dev3
+pinecone-client
 PyPDF2
 python-dotenv
 tenacity

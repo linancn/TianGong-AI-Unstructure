@@ -1,6 +1,7 @@
 import os
 import tempfile
 
+import arrow
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
@@ -34,6 +35,27 @@ idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
 def get_doi(pdf_path):
     doi = pdf_path[14:-4]
     return doi
+
+
+def to_unix_timestamp(date_str: str) -> int:
+    """
+    Convert a date string to a unix timestamp (seconds since epoch).
+
+    Args:
+        date_str: The date string to convert.
+
+    Returns:
+        The unix timestamp corresponding to the date string.
+
+    If the date string cannot be parsed as a valid date format, returns the current unix timestamp and prints a warning.
+    """
+    try:
+        # Parse the date string using arrow
+        date_obj = arrow.get(date_str)
+        return int(date_obj.timestamp())
+    except arrow.parser.ParserError:
+        # If the parsing fails, return the current unix timestamp and log a warning
+        return int(arrow.now().timestamp())
 
 
 def fix_utf8(original_list):
@@ -101,7 +123,8 @@ def extract_filename(path):
     return file_name
 
 
-def sci_chunk(pdf_path, vision=False):
+def sci_chunk(pdf_list, vision=False):
+    pdf_path = pdf_list["pdf_path"]
     # 图像的最小尺寸要求
     min_image_width = 250
     min_image_height = 270
@@ -189,7 +212,12 @@ def sci_chunk(pdf_path, vision=False):
             {
                 "id": doi + "_" + str(index),
                 "values": embeddings[index].embedding,
-                "metadata": {"text": item},
+                "metadata": {
+                    "text": item,
+                    "doi": doi,
+                    "journal": pdf_list["journal"],
+                    "date": to_unix_timestamp(pdf_list["date"]),
+                },
             }
         )
 
