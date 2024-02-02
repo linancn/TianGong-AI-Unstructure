@@ -21,42 +21,75 @@ filter = {
     "$all": [
         {"$exists": "upload_time"},
         {"$notExists": "embedding_time"},
-        {"journal": "JOURNAL OF INDUSTRIAL ECOLOGY"},
+        # {"journal": "JOURNAL OF INDUSTRIAL ECOLOGY"},
     ]
 }
 
 
-def get_all_records(
-    xata, table_name, columns, filter, page_size=1000, offset=0, all_records=[]
-):
-    page = {"size": page_size, "offset": offset}
+# def get_all_records(
+#     xata, table_name, columns, filter, page_size=1000, offset=0, all_records=[]
+# ):
+#     page = {"size": page_size, "offset": offset}
 
-    while True:
-        data = xata.data().query(
-            table_name,
-            {
-                "page": page,
-                "columns": columns,
-                "filter": filter,
-            },
-        )
+#     while True:
+#         data = xata.data().query(
+#             table_name,
+#             {
+#                 "page": page,
+#                 "columns": columns,
+#                 "filter": filter,
+#             },
+#         )
 
-        if not data["records"]:
-            return all_records
+#         if not data["records"]:
+#             return all_records
 
-        all_records.extend(data["records"])
+#         all_records.extend(data["records"])
 
-        return get_all_records(
-            xata=xata,
-            table_name=table_name,
-            columns=columns,
-            filter=filter,
-            offset=offset + page_size,
-            all_records=all_records,
-        )
+#         return get_all_records(
+#             xata=xata,
+#             table_name=table_name,
+#             columns=columns,
+#             filter=filter,
+#             offset=offset + page_size,
+#             all_records=all_records,
+#         )
 
 
-all_records = get_all_records(xata, table_name, columns, filter)
+def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
+    all_records = []
+    cursor = None
+    more = True
+
+    while more:
+        page = {"size": page_size}
+        if not cursor:
+            results = xata.data().query(
+                table_name,
+                {
+                    "page": page,
+                    "columns": columns,
+                    "filter": filter,
+                },
+            )
+        else:
+            page["after"] = cursor
+            results = xata.data().query(
+                table_name,
+                {
+                    "page": page,
+                    "columns": columns,
+                },
+            )
+
+        all_records.extend(results["records"])
+        cursor = results["meta"]["page"]["cursor"]
+        more = results["meta"]["page"]["more"]
+
+    return all_records
+
+
+all_records = fetch_all_records(xata, table_name, columns, filter)
 
 pdf_list = []
 for record in all_records:
