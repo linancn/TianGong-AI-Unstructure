@@ -136,7 +136,8 @@ def sci_chunk(pdf_list, vision=False):
         pdf_extract_images=vision,
         pdf_image_output_dir_path=tempfile.gettempdir(),
         skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
-        strategy="auto",
+        strategy="hi_res",
+        languages=["eng"],
     )
 
     skip = False

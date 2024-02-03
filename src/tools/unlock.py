@@ -10,11 +10,11 @@ def unlock_file(file):
 
 
 def unlock_directory(folder="new"):
-    os.chdir(folder)
-    filelist = os.listdir()
-    for file in filelist:
-        if os.path.splitext(file)[1] == ".pdf":
-            unlock_file(file)
+    for dirpath, dirnames, filenames in os.walk(folder):
+        for file in filenames:
+            if os.path.splitext(file)[1] == ".pdf":
+                file_path = os.path.join(dirpath, file)
+                unlock_file(file_path)
 
 
 if __name__ == "__main__":
