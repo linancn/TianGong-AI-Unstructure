@@ -111,9 +111,11 @@ for record in all_records:
 #     if "jiec" in pdf_name:
 #         jie_pdf_names.append(pdf_name)
 
-# test={"pdf_path": "docs/journals/10.1046/j.1365-294x.1997.00205.x.pdf",
-#             "journal": "test",
-#             "date": "2020-02",}
+# test = {
+#     "pdf_path": "docs/journals/10.1016/j.scitotenv.2020.144045.pdf",
+#     "journal": "test",
+#     "date": "2020-02",
+# }
 
 # sci_chunk(test)
 
@@ -125,9 +127,10 @@ def safe_sci_chunk(pdf):
         print(f"Error processing {pdf}: {str(e)}")
         return None
 
+
 start_time = time.time()
 
-with concurrent.futures.ProcessPoolExecutor(16) as executor:
+with concurrent.futures.ProcessPoolExecutor(12) as executor:
     executor.map(safe_sci_chunk, pdf_list)
 
 end_time = time.time()
