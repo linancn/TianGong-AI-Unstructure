@@ -49,16 +49,16 @@ def extract_text(file_name: str):
     return result_list
 
 
-def split_chunks(text_list: list):
+def split_chunks(text_list: list, source: str):
     chunks = []
     for text in text_list:
         for key, value in text.items():
-            chunks.append({"question": key, "answer": value})
+            chunks.append({"question": key, "answer": value, "source": source})
     return chunks
 
 
 w_client = weaviate.connect_to_local(
-    host="localhost", additional_config=AdditionalConfig(timeout=(600, 600))
+    host="localhost", additional_config=AdditionalConfig(timeout=(600, 800))
 )
 
 try:
@@ -74,7 +74,7 @@ try:
         file_name_without_ext = re.split(r"\.docx$", file_name)[0]
 
         contents = extract_text(file_path)
-        w_chunks = split_chunks(contents)
+        w_chunks = split_chunks(text_list=contents, source=file_name_without_ext)
 
         questions = w_client.collections.get(name="Water")
         questions.data.insert_many(w_chunks)
