@@ -6,4 +6,5 @@ python-dotenv
 tenacity
 tiktoken
 unstructured[all-docs]
+weaviate-client
 xata
