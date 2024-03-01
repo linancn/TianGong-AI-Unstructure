@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-import time
+# import time
 
 from xata.client import XataClient
 
@@ -128,11 +128,11 @@ def safe_sci_chunk(pdf):
         return None
 
 
-start_time = time.time()
+# start_time = time.time()
 
 with concurrent.futures.ProcessPoolExecutor(12) as executor:
     executor.map(safe_sci_chunk, pdf_list)
 
-end_time = time.time()
+# end_time = time.time()
 
-print(f"Execution time: {end_time - start_time} seconds")
+# print(f"Execution time: {end_time - start_time} seconds")

@@ -13,6 +13,7 @@ from unstructured.documents.elements import (
     Header,
     Image,
     Table,
+    TableChunk,
     Title,
 )
 from unstructured.partition.auto import partition
@@ -186,11 +187,17 @@ def sci_chunk(pdf_list, vision=False):
         if isinstance(chunk, CompositeElement):
             text = chunk.text
             text_list.append(text)
-        elif isinstance(chunk, Table):
+        elif isinstance(chunk, (Table, TableChunk)):
             if text_list:
-                text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
+                try:
+                    text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
+                except:
+                    text_list[-1] = text_list[-1] + "\n" + chunk.text
             else:
-                text_list.append(chunk.hunk.metadata.text_as_html)
+                try:
+                    text_list.append(chunk.metadata.text_as_html)
+                except:
+                    text_list.append(chunk.text)
 
     if len(text_list) >= 2 and len(text_list[-1]) < 10:
         text_list[-2] = text_list[-2] + " " + text_list[-1]

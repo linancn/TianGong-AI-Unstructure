@@ -158,3 +158,5 @@ pickle/
 new/
 docs/
 docs_output/
+
+*.log
