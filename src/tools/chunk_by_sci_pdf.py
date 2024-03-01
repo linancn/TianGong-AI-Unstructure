@@ -188,16 +188,13 @@ def sci_chunk(pdf_list, vision=False):
             text = chunk.text
             text_list.append(text)
         elif isinstance(chunk, (Table, TableChunk)):
+            text_as_html = getattr(chunk.metadata, "text_as_html", None)
+            text_to_append = text_as_html if text_as_html is not None else chunk.text
+
             if text_list:
-                try:
-                    text_list[-1] = text_list[-1] + "\n" + chunk.metadata.text_as_html
-                except:
-                    text_list[-1] = text_list[-1] + "\n" + chunk.text
+                text_list[-1] = text_list[-1] + "\n" + text_to_append
             else:
-                try:
-                    text_list.append(chunk.metadata.text_as_html)
-                except:
-                    text_list.append(chunk.text)
+                text_list.append(text_to_append)
 
     if len(text_list) >= 2 and len(text_list[-1]) < 10:
         text_list[-2] = text_list[-2] + " " + text_list[-1]

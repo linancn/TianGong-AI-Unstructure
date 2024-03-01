@@ -112,7 +112,7 @@ for record in all_records:
 #         jie_pdf_names.append(pdf_name)
 
 # test = {
-#     "pdf_path": "docs/journals/10.1016/j.scitotenv.2020.144045.pdf",
+#     "pdf_path": "docs/journals/10.1002/we.2349.pdf",
 #     "journal": "test",
 #     "date": "2020-02",
 # }
