@@ -1,4 +1,5 @@
 import os
+import pickle
 import tempfile
 
 import arrow
@@ -200,14 +201,11 @@ def sci_chunk(pdf_list, vision=False):
         text_list[-2] = text_list[-2] + " " + text_list[-1]
         text_list = text_list[:-1]
 
-    # with open(
-    #     f"docs_output/{extract_filename(pdf_path)}.txt", "w", encoding="utf-8"
-    # ) as f:
-    #     for item in text_list:
-    #         f.write("-----------------------------------\n")
-    #         f.write("%s\n" % item)
-
     data = fix_utf8(text_list)
+
+    with open(f"docs_output/{pdf_path}.pkl", "wb") as f:
+        pickle.dump(data, f)
+
     embeddings = get_embeddings(data)
 
     doi = get_doi(pdf_path)
