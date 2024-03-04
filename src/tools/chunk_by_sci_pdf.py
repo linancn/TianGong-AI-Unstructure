@@ -203,7 +203,11 @@ def sci_chunk(pdf_list, vision=False):
 
     data = fix_utf8(text_list)
 
-    with open(f"docs_output/{pdf_path}.pkl", "wb") as f:
+    dir_name, file_name = os.path.split(pdf_path)
+    output_dir = os.path.join("docs_output", dir_name)
+    os.makedirs(output_dir, exist_ok=True)
+
+    with open(os.path.join(output_dir, f"{file_name}.pkl"), "wb") as f:
         pickle.dump(data, f)
 
     embeddings = get_embeddings(data)
