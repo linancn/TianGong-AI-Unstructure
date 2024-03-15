@@ -9,10 +9,12 @@ services:
     - '8080'
     - --scheme
     - http
-    image: semitechnologies/weaviate:1.23.9
+    image: cr.weaviate.io/semitechnologies/weaviate:1.24.3
     ports:
     - 8080:8080
     - 50051:50051
+    volumes:
+    - weaviate_data:/var/lib/weaviate
     restart: on-failure:0
     environment:
       TRANSFORMERS_INFERENCE_API: 'http://t2v-transformers:8080'
@@ -24,11 +26,13 @@ services:
       ENABLE_MODULES: 'text2vec-transformers,reranker-transformers'
       CLUSTER_HOSTNAME: 'node1'
   t2v-transformers:
-    image: semitechnologies/transformers-inference:sentence-transformers-paraphrase-multilingual-mpnet-base-v2
+    image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-paraphrase-multilingual-mpnet-base-v2
     environment:
       ENABLE_CUDA: '0'
   reranker-transformers:
-    image: semitechnologies/reranker-transformers:cross-encoder-ms-marco-MiniLM-L-6-v2
+    image: cr.weaviate.io/semitechnologies/reranker-transformers:cross-encoder-ms-marco-MiniLM-L-6-v2
     environment:
       ENABLE_CUDA: '0'
+volumes:
+  weaviate_data:
 ...
