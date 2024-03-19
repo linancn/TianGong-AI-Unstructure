@@ -21,8 +21,6 @@ logging.basicConfig(
 with open("patents_data/20240208/patents_pinocone.pkl", "rb") as f:
     df = pickle.load(f)
 
-# 根据publication_number去重，只保留第一个
-# df = df.drop_duplicates(subset='publication_number', keep='first')
 
 # print(df.head())
 
@@ -82,6 +80,9 @@ def get_embeddings(input):
         logging.error(e)
 
 
+# @retry(wait=wait_fixed(3), stop=stop_after_attempt(10))
+
+
 @retry(wait=wait_fixed(3), stop=stop_after_attempt(10))
 def upsert_vectors(vectors):
     try:
@@ -92,7 +93,7 @@ def upsert_vectors(vectors):
         logging.error(e)
 
 
-for i in range(3630000, len(df), 1000):
+for i in range(4069000, len(df), 1000):
     logging.info(i)
     embeddings = get_embeddings(df["abstract"][i : i + 1000])
     for j in range(len(embeddings)):
