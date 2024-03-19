@@ -4,7 +4,7 @@ import os
 
 from xata.client import XataClient
 
-from journals.tools.chunk_by_sci_pdf import sci_chunk
+from tools.chunk_by_sci_pdf import sci_chunk
 
 xata_api_key = os.getenv("XATA_API_KEY")
 xata_db_url = os.getenv("XATA_DOCS_DB_URL")
@@ -130,7 +130,7 @@ def safe_sci_chunk(pdf):
 
 # start_time = time.time()
 
-with concurrent.futures.ProcessPoolExecutor(12) as executor:
+with concurrent.futures.ProcessPoolExecutor(30) as executor:
     executor.map(safe_sci_chunk, pdf_list)
 
 # end_time = time.time()
