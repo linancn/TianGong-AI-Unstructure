@@ -28,3 +28,4 @@ for record in data["records"]:
     ext = get_extension_from_content_type(file.headers["Content-Type"])
     with open("download/" + record["id"] + ext, "wb") as f:
         f.write(file.content)
+    print(f"Downloaded {record['id']}{ext}")
