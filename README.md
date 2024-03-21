@@ -31,7 +31,6 @@ sudo apt update
 sudo apt install python3.11-dev
 sudo apt install -y libmagic-dev
 sudo apt install -y poppler-utils
-sudo apt install -y tesseract-ocr
 sudo apt install -y libreoffice
 sudo apt install -y pandoc
 ```
@@ -81,10 +80,56 @@ sudo nginx -s reload
 sudo nginx -s stop
 ```
 
-## OCR model path
-
+## Update the verison of tesseract in WSL Shell
+### remove the old version and add the necessary libraries
+```bash
+sudo apt-get remove tesseract-ocr
+sudo apt-get install libpng-dev libjpeg-dev libtiff-dev libgif-dev libwebp-dev libopenjp2-7-dev zlib1g-dev
+```
+### get the latest version of leptonica by running the following code in sequence 
+```bash
+cd
+wget https://github.com/DanBloomberg/leptonica/archive/refs/tags/1.84.1.tar.gz
+tar -xzvf leptonica-1.84.1.tar.gz
+cd leptonica-1.84.1
+mkdir build
+cd build
+sudo snap install cmake # get the cmake version 3.28.3 #
+cmake ..
+make -j`nproc`
+sudo make install
+```
+### get the latest version of tesseract by running the following code in sequence 
+``` bash
+cd
+wget https://github.com/tesseract-ocr/tesseract/archive/refs/tags/5.3.4.tar.gz
+tar -xzvf 5.3.4.tar.gz
+cd tesseract-5.3.4
+mkdir build
+cd build
+cmake ..
+make -j `nproc`
+sudo make install
+```
+### set environment variables
+``` bash
+cd
+nano ~/.bashrc
+```
+#### add the following content at the end of the file，save the file(Ctrl-O) and exit(Ctrl-X)
+export TESSDATA_PREFIX=/usr/local/share/tessdata
+#### activate the settting
+``` bash
+source ~/.bashrc
+```
+### get language models
 https://github.com/tesseract-ocr/tessdata/blob/main/chi_sim.traineddata
+https://github.com/tesseract-ocr/tessdata/blob/main/eng.traineddata
 /usr/share/tesseract-ocr/4.00/tessdata
+### check the language models currently in use
+``` bash
+tesseract --list-langs
+```
 
 ## Run in Background
 ```bash
