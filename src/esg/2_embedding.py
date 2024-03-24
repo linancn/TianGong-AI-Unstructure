@@ -1,14 +1,24 @@
+import logging
 import os
 import pickle
+from datetime import UTC, datetime
 
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
+from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
 from xata import XataClient
 
 load_dotenv()
+
+logging.basicConfig(
+    filename="esg_embedding.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+    force=True,
+)
 
 client = OpenAI()
 
@@ -19,6 +29,9 @@ xata = XataClient(
     api_key=xata_api_key,
     db_url=xata_db_url,
 )
+
+pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
+idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -82,35 +95,69 @@ def merge_pickle_list(data):
     return result
 
 
+@retry(wait=wait_fixed(3), stop=stop_after_attempt(10))
+def upsert_vectors(vectors):
+    try:
+        idx.upsert(
+            vectors=vectors, batch_size=200, namespace="esg", show_progress=False
+        )
+    except Exception as e:
+        logging.error(e)
+
+
 dir = "esg_pickle"
 
 aa = os.listdir(dir)
 
 for file in os.listdir(dir):
-    datalist = []
-    file_path = os.path.join(dir, file)
-    data = load_pickle_list(file_path)
-    data = merge_pickle_list(data)
-    data = fix_utf8(data)
-    embeddings = get_embeddings(data)
 
-    file_id = file.split(".")[0]
+    try:
+        file_path = os.path.join(dir, file)
+        data = load_pickle_list(file_path)
+        data = merge_pickle_list(data)
+        data = fix_utf8(data)
+        embeddings = get_embeddings(data)
 
-    for index, e in enumerate(embeddings):
-        datalist.append(
-            {
-                "reportId": file_id,
-                "sortNumber": index,
-                "vector": e.embedding,
-                "text": data[index],
-            }
+        file_id = file.split(".")[0]
+
+        vectors = []
+        fulltext_list = []
+        for index, e in enumerate(embeddings):
+            fulltext_list.append(
+                {
+                    "sortNumber": index,
+                    "text": data[index],
+                    "reportId": file_id,
+                }
+            )
+            vectors.append(
+                {
+                    "id": file_id + "_" + str(index),
+                    "values": e.embedding,
+                    "metadata": {
+                        "text": data[index],
+                        "rec_id": file_id,
+                    },
+                }
+            )
+
+        n = len(fulltext_list)
+        for i in range(0, n, 500):
+            batch = fulltext_list[i : i + 500]
+            result = xata.records().bulk_insert("ESG_Fulltext", {"records": batch})
+
+        logging.info(
+            f"{file_id} fulltext insert finished, with status_code: {result.status_code}"
         )
 
-    n = len(datalist)
-    for i in range(0, n, 500):
-        batch = datalist[i : i + 500]
-        result = xata.records().bulk_insert("ESG_Embeddings", {"records": batch})
-        print(
-            f"{file_id} embedding finished for batch starting at index {i}, with status_code: {result.status_code}",
-            flush=True,
+        upsert_vectors(vectors)
+
+        embedded = xata.records().update(
+            "ESG_Reports", file_id, {"embeddingTime": datetime.now(UTC).isoformat()}
         )
+
+        logging.info(f"{file_id} embedding finished")
+
+    except Exception as e:
+        logging.error(e)
+        continue
