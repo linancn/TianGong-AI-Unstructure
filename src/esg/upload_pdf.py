@@ -7,7 +7,7 @@ load_dotenv()
 
 xata = XataClient(api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_DB_URL"))
 
-for file in os.listdir("download"):
+for file in os.listdir("esg_data"):
     if file.endswith(".pdf"):
         record_id = file.split(".")[0]
         # if record_id == "rec_cm1s4g6q2mhohok8sif0":

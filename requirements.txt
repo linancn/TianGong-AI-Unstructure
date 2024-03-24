@@ -1,5 +1,6 @@
 arrow
 openai
+oss2
 pinecone-client
 PyPDF2
 python-dotenv

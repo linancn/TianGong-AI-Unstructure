@@ -1,6 +1,7 @@
 import tempfile
 
 from dotenv import load_dotenv
+from tools.vision import vision_completion
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import clean, group_broken_paragraphs
 from unstructured.documents.elements import (
@@ -11,8 +12,6 @@ from unstructured.documents.elements import (
     Table,
 )
 from unstructured.partition.auto import partition
-
-from tools.vision import vision_completion
 
 load_dotenv()
 
@@ -27,7 +26,7 @@ def unstructure_pdf(pdf_name, extract_images=False):
         pdf_image_output_dir_path=tempfile.gettempdir(),
         skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
         strategy="hi_res",
-        languages=["eng", "chi_sim"],
+        languages=["chi_sim", "eng"],
     )
 
     filtered_elements = [

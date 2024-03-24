@@ -158,6 +158,8 @@ pickle/
 new/
 docs/
 docs_output/
+esg_data/
 esg_pickle/
-
+esg_txt/
 *.log
+*log*.txt

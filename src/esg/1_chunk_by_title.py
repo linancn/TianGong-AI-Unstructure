@@ -56,25 +56,25 @@ records = fetch_all_records(xata, table_name, columns, filter)
 def process_pdf(record):
     record_id = record["id"]
 
-    text_list = unstructure_pdf("download/" + record_id + ".pdf")
+    text_list = unstructure_pdf("esg_data/" + record_id + ".pdf")
 
     with open("esg_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(text_list)
 
-    with open("txt/" + record_id + ".txt", "w") as f:
+    with open("esg_txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
 
 
 # record = {"id": "rec_clu17n8bslsq4fnfc8s0"}
 
-record = {"id": "rec_cltid4e9hf9adk7qf2rg"}
+# record = {"id": "rec_cltid4e9hf9adk7qf2rg"}
 
-process_pdf(record)
+# process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
-# with concurrent.futures.ProcessPoolExecutor(max_workers=30) as executor:
-#     executor.map(process_pdf, records)
+with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+    executor.map(process_pdf, records)
