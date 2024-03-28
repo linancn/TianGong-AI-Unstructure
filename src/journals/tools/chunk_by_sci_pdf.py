@@ -139,7 +139,7 @@ def sci_chunk(pdf_list, vision=False):
         pdf_infer_table_structure=True,
         skip_infer_table_types=["jpg", "png", "xls", "xlsx", "heic"],
         strategy="hi_res",
-        hi_res_model_name="detectron2_onnx",
+        hi_res_model_name="yolox",
         languages=["eng"],
     )
 
