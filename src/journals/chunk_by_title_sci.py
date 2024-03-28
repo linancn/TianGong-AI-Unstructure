@@ -1,10 +1,12 @@
 import concurrent.futures
 import os
-# import time
-
-from xata.client import XataClient
+from urllib.parse import quote
 
 from tools.chunk_by_sci_pdf import sci_chunk
+from xata.client import XataClient
+
+# import time
+
 
 xata_api_key = os.getenv("XATA_API_KEY")
 xata_db_url = os.getenv("XATA_DOCS_DB_URL")
@@ -93,9 +95,11 @@ all_records = fetch_all_records(xata, table_name, columns, filter)
 
 pdf_list = []
 for record in all_records:
+    pdf_path = quote(quote("docs/journals/" + record["doi"] + ".pdf"))
     pdf_list.append(
         {
-            "pdf_path": "docs/journals/" + record["doi"] + ".pdf",
+            "doi": record["doi"],
+            "pdf_path": pdf_path,
             "journal": record["journal"],
             "date": record["date"],
         }
@@ -112,6 +116,7 @@ for record in all_records:
 #         jie_pdf_names.append(pdf_name)
 
 # test = {
+#     "doi": "10.1002/we.2349",
 #     "pdf_path": "docs/journals/10.1002/we.2349.pdf",
 #     "journal": "test",
 #     "date": "2020-02",
@@ -133,6 +138,7 @@ def safe_sci_chunk(pdf):
 with concurrent.futures.ProcessPoolExecutor(30) as executor:
     executor.map(safe_sci_chunk, pdf_list)
 
-# end_time = time.time()
+# end_time = time.time()htop
+    
 
 # print(f"Execution time: {end_time - start_time} seconds")

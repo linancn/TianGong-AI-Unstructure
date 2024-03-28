@@ -6,6 +6,7 @@ import arrow
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
+from tools.vision import vision_completion
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import clean, group_broken_paragraphs
 from unstructured.documents.elements import (
@@ -19,8 +20,6 @@ from unstructured.documents.elements import (
 )
 from unstructured.partition.auto import partition
 from xata.client import XataClient
-
-from tools.vision import vision_completion
 
 load_dotenv()
 
@@ -137,8 +136,10 @@ def sci_chunk(pdf_list, vision=False):
         header_footer=False,
         pdf_extract_images=vision,
         pdf_image_output_dir_path=tempfile.gettempdir(),
-        skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
+        pdf_infer_table_structure=True,
+        skip_infer_table_types=["jpg", "png", "xls", "xlsx", "heic"],
         strategy="hi_res",
+        hi_res_model_name="detectron2_onnx",
         languages=["eng"],
     )
 
@@ -212,7 +213,7 @@ def sci_chunk(pdf_list, vision=False):
 
     embeddings = get_embeddings(data)
 
-    doi = get_doi(pdf_path)
+    doi = pdf_list["doi"]
     vectors = []
     for index, item in enumerate(data):
         vectors.append(
