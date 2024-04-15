@@ -157,6 +157,7 @@ download/
 pickle/
 new/
 docs/
+docs
 docs_output/
 esg_data/
 esg_pickle/
