@@ -12,8 +12,8 @@ xata = XataClient(
     api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_ESG_DB_URL")
 )
 
-table_name = "ESG_Reports"
-columns = ["id"]
+table_name = "ESG"
+columns = ["id", "language"]
 filter = {"$notExists": "embedding_time"}
 
 
@@ -55,8 +55,14 @@ records = fetch_all_records(xata, table_name, columns, filter)
 
 def process_pdf(record):
     record_id = record["id"]
+    if record["language"] == "eng":
+        language = ["eng"]
+    else:
+        language = [record["language"], "eng"]
 
-    text_list = unstructure_pdf("esg_data/" + record_id + ".pdf")
+    text_list = unstructure_pdf(
+        pdf_name="esg_data/" + record_id + ".pdf", languages=language
+    )
 
     with open("esg_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
@@ -67,14 +73,12 @@ def process_pdf(record):
         f.write(text_str)
 
 
-# record = {"id": "rec_clu17n8bslsq4fnfc8s0"}
+record = {"id": "rec_cm00erij939dsmamjnm0", "language": "eng"}
 
-# record = {"id": "rec_cltid4e9hf9adk7qf2rg"}
-
-# process_pdf(record)
+process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+with concurrent.futures.ProcessPoolExecutor(max_workers=30) as executor:
     executor.map(process_pdf, records)
