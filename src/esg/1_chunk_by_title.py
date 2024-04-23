@@ -73,12 +73,12 @@ def process_pdf(record):
         f.write(text_str)
 
 
-record = {"id": "rec_cm00erij939dsmamjnm0", "language": "eng"}
+# record = {"id": "rec_coh3s2o41648vkt35lsg", "language": "chi_sim"}
 
-process_pdf(record)
+# process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=30) as executor:
+with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
     executor.map(process_pdf, records)
