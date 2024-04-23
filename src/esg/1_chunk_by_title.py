@@ -14,7 +14,7 @@ xata = XataClient(
 
 table_name = "ESG_Reports"
 columns = ["id"]
-filter = {"$notExists": "embeddingTime"}
+filter = {"$notExists": "embedding_time"}
 
 
 def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
