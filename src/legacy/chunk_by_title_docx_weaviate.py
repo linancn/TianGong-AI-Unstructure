@@ -9,6 +9,7 @@ from unstructured.chunking.title import chunk_by_title
 from unstructured.documents.elements import CompositeElement, Table
 from unstructured.partition.docx import partition_docx
 from weaviate.config import AdditionalConfig
+from weaviate.classes.config import Configure, DataType, Property
 
 load_dotenv()
 
@@ -44,16 +45,23 @@ def extract_text(file_name: str):
     for text in text_list:
         split_text = text.split("\n\n", 1)
         if len(split_text) == 2:
-            title, _ = split_text
-        result_list.append({title: text})
+            title, content = split_text
+        else:
+            title = text
+            content = ""  
+        result_list.append((title, content))  
     return result_list
 
 
+# def split_chunks(text_list: list, source: str):
+#     chunks = []
+#     for key, value in text_list.items():
+#         chunks.append({"title": key, "content": value, "source": source})
+#     return chunks
 def split_chunks(text_list: list, source: str):
     chunks = []
-    for text in text_list:
-        for key, value in text.items():
-            chunks.append({"question": key, "answer": value, "source": source})
+    for title, content in text_list:  # Change this line
+        chunks.append({"title": title, "content": content, "source": source})
     return chunks
 
 
@@ -64,9 +72,20 @@ w_client = weaviate.connect_to_local(
 try:
     collection = w_client.collections.create(
         name="Water",
-        vectorizer_config=wvc.config.Configure.Vectorizer.text2vec_transformers(),
+        properties=[
+            Property(name="title", data_type=DataType.TEXT),
+            Property(name="content", data_type=DataType.TEXT),
+            Property(name="source", data_type=DataType.TEXT),
+        ],
+        vectorizer_config=[
+            Configure.NamedVectors.text2vec_transformers(
+                name="title", source_properties=["title"]
+            ),
+            Configure.NamedVectors.text2vec_transformers(
+                name="content", source_properties=["content"]
+            ),
+        ],
     )
-
     directory = "water"
 
     for file_path in glob.glob(os.path.join(directory, "*.docx")):
@@ -74,12 +93,19 @@ try:
         file_name_without_ext = re.split(r"\.docx$", file_name)[0]
 
         contents = extract_text(file_path)
+
         w_chunks = split_chunks(text_list=contents, source=file_name_without_ext)
 
-        questions = w_client.collections.get(name="Water")
-        questions.data.insert_many(w_chunks)
+        # questions = w_client.collections.get(name="Water")
+        # questions.data.insert_many(w_chunks)
 
+        water_colletion = w_client.collections.get(name="Water")
+
+        for chunk in w_chunks:
+            water_colletion.data.insert(chunk)
     # w_client.collections.delete(name="water")
+
+    print("Data inserted successfully")
 
 finally:
     w_client.close()
