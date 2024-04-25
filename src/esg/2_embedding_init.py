@@ -153,7 +153,7 @@ for file in os.listdir(dir):
         upsert_vectors(vectors)
 
         embedded = xata.records().update(
-            "ESG_Reports", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
+            "ESG", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
         )
 
         logging.info(f"{file_id} embedding finished")
