@@ -2,6 +2,7 @@ arrow
 openai
 oss2
 pinecone-client
+Pyarrow
 PyPDF2
 python-dotenv
 tenacity

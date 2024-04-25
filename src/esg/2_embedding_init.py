@@ -2,7 +2,9 @@ import logging
 import os
 import pickle
 from datetime import UTC, datetime
+from io import StringIO
 
+import pandas as pd
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -17,6 +19,7 @@ logging.basicConfig(
     filename="esg_embedding.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
+    filemode="w",
     force=True,
 )
 
@@ -32,6 +35,39 @@ xata = XataClient(
 
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
+
+
+def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
+    all_records = []
+    cursor = None
+    more = True
+
+    while more:
+        page = {"size": page_size}
+        if not cursor:
+            results = xata.data().query(
+                table_name,
+                {
+                    "page": page,
+                    "columns": columns,
+                    "filter": filter,
+                },
+            )
+        else:
+            page["after"] = cursor
+            results = xata.data().query(
+                table_name,
+                {
+                    "page": page,
+                    "columns": columns,
+                },
+            )
+
+        all_records.extend(results["records"])
+        cursor = results["meta"]["page"]["cursor"]
+        more = results["meta"]["page"]["more"]
+
+    return all_records
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -55,16 +91,21 @@ def get_embeddings(text_list, model="text-embedding-3-small"):
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
         results = []
+        # print(text_list[1128:1129])
+        # result = client.embeddings.create(input=text_list[1128:1129], model=model).data
+
         for i in range(0, length, 1000):
-            results.append(
-                client.embeddings.create(
-                    input=text_list[i : i + 1000], model=model
-                ).data
-            )
-        return sum(results, [])
+            result = client.embeddings.create(
+                input=text_list[i : i + 1000], model=model
+            ).data
+            results += result
+        return results
 
     except Exception as e:
         print(e)
+
+
+# [Embedding(embedding=[], index=0, object='embedding'),Embedding(embedding=[], index=0, object='embedding')]
 
 
 def load_pickle_list(file_path):
@@ -73,17 +114,57 @@ def load_pickle_list(file_path):
     return data
 
 
+def split_dataframe_table(html_table, chunk_size=8100):
+    dfs = pd.read_html(StringIO(html_table))
+    if not dfs:
+        return []
+
+    df = dfs[0]
+    tables = []
+    sub_df = pd.DataFrame()
+    token_count = 0
+
+    for _, row in df.iterrows():
+        row_html = row.to_frame().T.to_html(index=False, border=0, classes=None)
+        row_token_count = num_tokens_from_string(row_html)
+
+        if token_count + row_token_count > chunk_size and not sub_df.empty:
+            sub_html = sub_df.to_html(index=False, border=0, classes=None)
+            tables.append(sub_html)
+            sub_df = pd.DataFrame()
+            token_count = 0
+
+        sub_df = pd.concat([sub_df, row.to_frame().T])
+        token_count += row_token_count
+
+    if not sub_df.empty:
+        sub_html = sub_df.to_html(index=False, border=0, classes=None)
+        tables.append(sub_html)
+
+    return tables
+
+
 def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        if len(d) > 8000:
+        if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
             for table in tables:
                 table_content = str(table)
-                if table_content:  # 确保表格内容不为空
-                    result.append(table_content)
+                if num_tokens_from_string(table_content) < 8100:
+                    if table_content:  # 确保表格内容不为空
+                        result.append(table_content)
+                else:
+                    try:
+                        sub_tables = split_dataframe_table(table_content)
+                        for sub_table in sub_tables:
+                            if sub_table:
+                                soup = BeautifulSoup(sub_table, "html.parser")
+                                result.append(str(soup))
+                    except Exception as e:
+                        logging.error(e)
         elif num_tokens_from_string(d) < 15:
             temp += d + " "
         else:
@@ -105,11 +186,21 @@ def upsert_vectors(vectors):
         logging.error(e)
 
 
+table_name = "ESG"
+columns = ["id"]
+filter = {"$all": [{"$notExists": "embedding_time"}]}
+
+all_records = fetch_all_records(xata, table_name, columns, filter)
+
+ids = [record["id"] for record in all_records]
+
+files = [id + ".pkl" for id in ids]
+
 dir = "esg_pickle"
 
-aa = os.listdir(dir)
+# aa = os.listdir(dir)
 
-for file in os.listdir(dir):
+for file in files:
 
     try:
         file_path = os.path.join(dir, file)
