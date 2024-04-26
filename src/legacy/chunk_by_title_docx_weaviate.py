@@ -10,6 +10,7 @@ from unstructured.documents.elements import CompositeElement, Table
 from unstructured.partition.docx import partition_docx
 from weaviate.config import AdditionalConfig
 from weaviate.classes.config import Configure, DataType, Property
+import concurrent.futures
 
 load_dotenv()
 
@@ -64,6 +65,13 @@ def split_chunks(text_list: list, source: str):
         chunks.append({"title": title, "content": content, "source": source})
     return chunks
 
+def process_docx(file_path):
+    file_name_without_ext = os.path.splitext(os.path.basename(file_path))[0]
+    contents = extract_text(file_path)
+    w_chunks = split_chunks(text_list=contents, source=file_name_without_ext)
+    water_collection = w_client.collections.get(name="Water_docx")
+    for chunk in w_chunks:
+        water_collection.data.insert(chunk)
 
 w_client = weaviate.connect_to_local(
     host="localhost", additional_config=AdditionalConfig(timeout=(600, 800))
@@ -71,7 +79,7 @@ w_client = weaviate.connect_to_local(
 
 try:
     collection = w_client.collections.create(
-        name="Water",
+        name="Water_docx",
         properties=[
             Property(name="title", data_type=DataType.TEXT),
             Property(name="content", data_type=DataType.TEXT),
@@ -87,22 +95,25 @@ try:
         ],
     )
     directory = "water"
+    docx_files = glob.glob(os.path.join(directory, "*.docx"))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+        executor.map(process_docx, docx_files)
 
-    for file_path in glob.glob(os.path.join(directory, "*.docx")):
-        file_name = os.path.basename(file_path)
-        file_name_without_ext = re.split(r"\.docx$", file_name)[0]
+    # for file_path in glob.glob(os.path.join(directory, "*.docx")):
+    #     file_name = os.path.basename(file_path)
+    #     file_name_without_ext = re.split(r"\.docx$", file_name)[0]
 
-        contents = extract_text(file_path)
+    #     contents = extract_text(file_path)
 
-        w_chunks = split_chunks(text_list=contents, source=file_name_without_ext)
+    #     w_chunks = split_chunks(text_list=contents, source=file_name_without_ext)
 
-        # questions = w_client.collections.get(name="Water")
-        # questions.data.insert_many(w_chunks)
+    #     # questions = w_client.collections.get(name="Water")
+    #     # questions.data.insert_many(w_chunks)
 
-        water_colletion = w_client.collections.get(name="Water")
+    #     water_colletion = w_client.collections.get(name="Water_docx")
 
-        for chunk in w_chunks:
-            water_colletion.data.insert(chunk)
+    #     for chunk in w_chunks:
+    #         water_colletion.data.insert(chunk)
     # w_client.collections.delete(name="water")
 
     print("Data inserted successfully")

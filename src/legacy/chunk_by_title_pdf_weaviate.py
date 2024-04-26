@@ -5,6 +5,7 @@ import tempfile
 import weaviate
 from weaviate.config import AdditionalConfig
 from weaviate.classes.config import Configure, DataType, Property
+import concurrent.futures
 
 
 # from openai import OpenAI
@@ -49,7 +50,7 @@ def check_misc(text):
         "AUTHOR INFORMATION",
         "ABBREVIATIONS",
         "ASSOCIATED CONTENT",
-        "Read Online"
+        "Read Online",
     ]
 
     text = text.strip()
@@ -172,13 +173,22 @@ def split_chunks(text_list: list, source: str):
     return chunks
 
 
+def process_pdf(file_path):
+    file_name_without_ext = os.path.splitext(os.path.basename(file_path))[0]
+    contents = sci_chunk(file_path)
+    w_chunks = split_chunks(text_list=contents, source=file_name_without_ext)
+    water_collection = w_client.collections.get(name="Water_pdf")
+    for chunk in w_chunks:
+        water_collection.data.insert(chunk)
+
+
 w_client = weaviate.connect_to_local(
     host="localhost", additional_config=AdditionalConfig(timeout=(600, 800))
 )
 
 try:
     collection = w_client.collections.create(
-        name="Water",
+        name="Water_pdf",
         properties=[
             Property(name="title", data_type=DataType.TEXT),
             Property(name="content", data_type=DataType.TEXT),
@@ -194,20 +204,9 @@ try:
         ],
     )
     directory = "test"
-
-    for file_path in glob.glob(os.path.join(directory, "*.pdf")):
-        file_name_without_ext = os.path.splitext(os.path.basename(file_path))[0]
-
-        contents = sci_chunk(file_path)  # 使用sci_chunk处理PDF并获取数据
-
-        w_chunks = split_chunks(
-            text_list=contents, source=file_name_without_ext
-        )  # 使用处理后的文本数据
-
-        water_collection = w_client.collections.get(name="Water")
-
-        for chunk in w_chunks:
-            water_collection.data.insert(chunk)
+    pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+        executor.map(process_pdf, pdf_files)
 
     print("Data inserted successfully")
 

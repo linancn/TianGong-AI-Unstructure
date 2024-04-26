@@ -1,11 +1,9 @@
 import glob
 import os
 from pptx import Presentation
-import weaviate
-from weaviate.config import AdditionalConfig
-from weaviate.classes.config import Configure, DataType, Property
 from unstructured.partition.pptx import partition_pptx
 import concurrent.futures
+import pickle
 
 
 def extract_text(file_name: str):
@@ -57,39 +55,23 @@ def extract_text(file_name: str):
 
 
 def process_pptx(file_path):
-    contents = extract_text(file_path)
-    water_collection = w_client.collections.get(name="Water_pptx")
-    for item in contents:
-        water_collection.data.insert(item)
+    record_id = os.path.splitext(os.path.basename(file_path))[0]
+
+    text_list = extract_text(file_path)
+
+    with open("pickle/" + record_id + ".pkl", "wb") as f:
+        pickle.dump(text_list, f)
+
+    text_str = "\n----------\n".join(map(str, text_list))
+
+    with open("txt/" + record_id + ".txt", "w") as f:
+        f.write(text_str)
 
 
-w_client = weaviate.connect_to_local(
-    host="localhost", additional_config=AdditionalConfig(timeout=(600, 800))
-)
-try:
-    collection = w_client.collections.create(
-        name="Water_pptx",
-        properties=[
-            Property(name="title", data_type=DataType.TEXT),
-            Property(name="content", data_type=DataType.TEXT),
-            Property(name="source", data_type=DataType.TEXT),
-        ],
-        vectorizer_config=[
-            Configure.NamedVectors.text2vec_transformers(
-                name="title", source_properties=["title"]
-            ),
-            Configure.NamedVectors.text2vec_transformers(
-                name="content", source_properties=["content"]
-            ),
-        ],
-    )
+directory = "test"
+pptx_files = glob.glob(os.path.join(directory, "*.pptx"))
 
-    directory = "test"
-    pptx_files = glob.glob(os.path.join(directory, "*.pptx"))
-    with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
-        executor.map(process_pptx, pptx_files)
+with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+    executor.map(process_pptx, pptx_files)
 
-    print("Data inserted successfully")
-
-finally:
-    w_client.close()
+print("Data inserted successfully")
