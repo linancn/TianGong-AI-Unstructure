@@ -16,7 +16,7 @@ from unstructured.partition.auto import partition
 load_dotenv()
 
 
-def unstructure_pdf(pdf_name, extract_images=False):
+def unstructure_pdf(pdf_name, languages=["chi_sim", "eng"], extract_images=False):
     min_image_width = 250
     min_image_height = 270
 
@@ -26,7 +26,8 @@ def unstructure_pdf(pdf_name, extract_images=False):
         pdf_image_output_dir_path=tempfile.gettempdir(),
         skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
         strategy="hi_res",
-        languages=["chi_sim", "eng"],
+        hi_res_model_name="yolox",
+        languages=languages,
     )
 
     filtered_elements = [
