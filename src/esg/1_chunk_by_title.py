@@ -61,7 +61,7 @@ def process_pdf(record):
         language = [record["language"], "eng"]
 
     text_list = unstructure_pdf(
-        pdf_name="esg_data/" + record_id + ".pdf", languages=language
+        pdf_name="docs/esg/" + record_id + ".pdf", languages=language
     )
 
     with open("esg_pickle/" + record_id + ".pkl", "wb") as f:
