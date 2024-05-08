@@ -142,5 +142,6 @@ nohup .venv/bin/python3.11 src/esg/2_embedding_init.py > esg_embedding_log.txt 2
 nohup .venv/bin/python3.11 src/standards/1_chunk_by_title.py > log.txt 2>&1 &
 
 nohup .venv/bin/python3.11 src/reports/1_chunk_by_title.py > log.txt 2>&1 &
+nohup .venv/bin/python3.11 src/reports/2_embedding_init.py > log.txt 2>&1 &
 
 ```
