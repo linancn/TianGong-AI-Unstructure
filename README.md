@@ -90,7 +90,7 @@ sudo apt-get install libpng-dev libjpeg-dev libtiff-dev libgif-dev libwebp-dev l
 ```bash
 cd
 wget https://github.com/DanBloomberg/leptonica/archive/refs/tags/1.84.1.tar.gz
-tar -xzvf leptonica-1.84.1.tar.gz
+tar -xzvf 1.84.1.tar.gz
 cd leptonica-1.84.1
 mkdir build
 cd build
@@ -124,8 +124,11 @@ source ~/.bashrc
 ```
 ### get language models
 https://github.com/tesseract-ocr/tessdata/blob/main/chi_sim.traineddata
+https://github.com/tesseract-ocr/tessdata/blob/main/chi_tra.traineddata
 https://github.com/tesseract-ocr/tessdata/blob/main/eng.traineddata
-/usr/share/tesseract-ocr/4.00/tessdata
+
+/usr/local/share/tessdata/
+
 ### check the language models currently in use
 ``` bash
 tesseract --list-langs

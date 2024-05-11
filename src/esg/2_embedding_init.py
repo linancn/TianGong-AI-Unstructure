@@ -79,14 +79,16 @@ def num_tokens_from_string(string: str) -> int:
 
 def fix_utf8(original_list):
     cleaned_list = []
-    for original_str in original_list:
+    for item in original_list:
+        original_str, page = item
         cleaned_str = original_str.replace("\ufffd", " ")
-        cleaned_list.append(cleaned_str)
+        cleaned_list.append((cleaned_str, page))
     return cleaned_list
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def get_embeddings(text_list, model="text-embedding-3-small"):
+def get_embeddings(items, model="text-embedding-3-small"):
+    text_list = [item[0] for item in items]
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
@@ -147,7 +149,8 @@ def split_dataframe_table(html_table, chunk_size=8100):
 def merge_pickle_list(data):
     temp = ""
     result = []
-    for d in data:
+    for item in data:
+        d, page = item
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -155,23 +158,23 @@ def merge_pickle_list(data):
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
                     if table_content:  # 确保表格内容不为空
-                        result.append(table_content)
+                        result.append((table_content, page))
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append(str(soup))
+                                result.append((str(soup), page))
                     except Exception as e:
                         logging.error(e)
         elif num_tokens_from_string(d) < 15:
             temp += d + " "
         else:
-            result.append(temp + d)
+            result.append(((temp + d), page))
             temp = ""
     if temp:
-        result.append(temp)
+        result.append((temp, page))
 
     return result
 
@@ -198,9 +201,9 @@ files = [id + ".pkl" for id in ids]
 
 dir = "esg_pickle"
 
-# aa = os.listdir(dir)
+aa = os.listdir(dir)
 
-for file in files:
+for file in aa:
 
     try:
         file_path = os.path.join(dir, file)
@@ -217,7 +220,8 @@ for file in files:
             fulltext_list.append(
                 {
                     "sortNumber": index,
-                    "text": data[index],
+                    "pageNumber": data[index][1],
+                    "text": data[index][0],
                     "reportId": file_id,
                 }
             )
@@ -226,7 +230,7 @@ for file in files:
                     "id": file_id + "_" + str(index),
                     "values": e.embedding,
                     "metadata": {
-                        "text": data[index],
+                        "text": data[index][0],
                         "rec_id": file_id,
                     },
                 }
