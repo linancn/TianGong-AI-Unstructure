@@ -72,8 +72,20 @@ def process_pdf(record):
     with open("reports_txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
 
+    # text_list = unstructure_pdf(
+    #     pdf_name="pickle_single/pdf/" + record_id + ".pdf", languages=language
+    # )
 
-# record = {"id": "rec_coh3s2o41648vkt35lsg", "language": "chi_sim"}
+    # with open("pickle_single/pickle/" + record_id + ".pkl", "wb") as f:
+    #     pickle.dump(text_list, f)
+
+    # text_str = "\n----------\n".join(text_list)
+
+    # with open("pickle_single/txt/" + record_id + ".txt", "w") as f:
+    #     f.write(text_str)
+
+
+# record = {"id": "rec_cospqe45251e3okho9g0", "language": "eng"}
 
 # process_pdf(record)
 
