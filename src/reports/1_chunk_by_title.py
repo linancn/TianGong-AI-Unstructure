@@ -67,7 +67,9 @@ def process_pdf(record):
     with open("reports_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
-    text_str = "\n----------\n".join(text_list)
+    text_str_list = ["Page {}: {}".format(page_number, text) for text, page_number in text_list]
+
+    text_str = "\n----------\n".join(text_str_list)
 
     with open("reports_txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
@@ -85,12 +87,12 @@ def process_pdf(record):
     #     f.write(text_str)
 
 
-# record = {"id": "rec_cospqe45251e3okho9g0", "language": "eng"}
+# record = {"id": "rec_cospq7q931c3m1p6bisg", "language": "eng"}
 
 # process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
+with concurrent.futures.ProcessPoolExecutor(max_workers=24) as executor:
     executor.map(process_pdf, records)

@@ -67,11 +67,16 @@ def unstructure_pdf(pdf_name, languages=["chi_sim", "eng"], extract_images=False
     for chunk in chunks:
         if isinstance(chunk, CompositeElement):
             text = chunk.text
-            text_list.append(text)
+            page_number = chunk.metadata.page_number
+            text_list.append((text, page_number))
         elif isinstance(chunk, Table):
             if text_list:
-                text_list[-1] = text_list[-1] + "\n\n" + chunk.metadata.text_as_html
+                text_list[-1] = (
+                    text_list[-1][0] + "\n\n" + chunk.metadata.text_as_html,
+                    text_list[-1][1],
+                )
             else:
-                text_list.append(chunk.metadata.text_as_html)
+                page_number = chunk.metadata.page_number
+                text_list.append((chunk.metadata.text_as_html, page_number))
 
     return text_list
