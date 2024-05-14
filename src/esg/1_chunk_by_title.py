@@ -52,6 +52,15 @@ def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
 
 records = fetch_all_records(xata, table_name, columns, filter)
 
+files = os.listdir("esg_pickle")
+
+id = [file[:-4] for file in files]
+
+records = [record for record in records if record["id"] not in id]
+
+# ids = [record["id"] for record in records]
+# print(ids)
+
 
 def process_pdf(record):
     record_id = record["id"]
@@ -67,7 +76,9 @@ def process_pdf(record):
     with open("esg_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
-    text_str_list = ["Page {}: {}".format(page_number, text) for text, page_number in text_list]
+    text_str_list = [
+        "Page {}: {}".format(page_number, text) for text, page_number in text_list
+    ]
 
     text_str = "\n----------\n".join(text_str_list)
 
@@ -75,12 +86,21 @@ def process_pdf(record):
         f.write(text_str)
 
 
-# record = {"id": "rec_coh3s2o41648vkt35lsg", "language": "chi_sim"}
+def safe_process_pdf(record):
+    try:
+        return process_pdf(record)
+    except Exception as e:
+        print(f"Error processing {record}: {str(e)}")
+        return None
 
-# process_pdf(record)
+
+# record = {"id": "rec_cm1roi6q2mhohok8sgc0", "language": "eng"}
+
+# safe_process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
-    executor.map(process_pdf, records)
+
+with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+    executor.map(safe_process_pdf, records)
