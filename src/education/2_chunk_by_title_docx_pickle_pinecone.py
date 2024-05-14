@@ -16,7 +16,7 @@ from xata import XataClient
 load_dotenv()
 
 logging.basicConfig(
-    filename="esg_embedding.log",
+    filename="education_docx_embedding.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -26,7 +26,7 @@ logging.basicConfig(
 client = OpenAI()
 
 xata_api_key = os.getenv("XATA_API_KEY")
-xata_db_url = os.getenv("XATA_ESG_DB_URL")
+xata_db_url = os.getenv("XATA_DOCS_DB_URL")
 
 xata = XataClient(
     api_key=xata_api_key,
@@ -79,10 +79,9 @@ def num_tokens_from_string(string: str) -> int:
 
 def fix_utf8(original_list):
     cleaned_list = []
-    for item in original_list:
-        original_str, page = item
+    for original_str in original_list:
         cleaned_str = original_str.replace("\ufffd", " ")
-        cleaned_list.append((cleaned_str, page))
+        cleaned_list.append(cleaned_str)
     return cleaned_list
 
 
@@ -149,8 +148,7 @@ def split_dataframe_table(html_table, chunk_size=8100):
 def merge_pickle_list(data):
     temp = ""
     result = []
-    for item in data:
-        d, page = item
+    for d in data:
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -158,23 +156,23 @@ def merge_pickle_list(data):
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
                     if table_content:  # 确保表格内容不为空
-                        result.append((table_content, page))
+                        result.append(table_content)
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append((str(soup), page))
+                                result.append(str(soup))
                     except Exception as e:
                         logging.error(e)
         elif num_tokens_from_string(d) < 15:
             temp += d + " "
         else:
-            result.append(((temp + d), page))
+            result.append((temp + d))
             temp = ""
     if temp:
-        result.append((temp, page))
+        result.append(temp)
 
     return result
 
@@ -183,14 +181,14 @@ def merge_pickle_list(data):
 def upsert_vectors(vectors):
     try:
         idx.upsert(
-            vectors=vectors, batch_size=200, namespace="esg", show_progress=False
+            vectors=vectors, batch_size=200, namespace="education", show_progress=False
         )
     except Exception as e:
         logging.error(e)
 
 
-table_name = "ESG"
-columns = ["id"]
+table_name = "education"
+columns = ["id","course"]
 filter = {"$all": [{"$notExists": "embedding_time"}]}
 
 all_records = fetch_all_records(xata, table_name, columns, filter)
@@ -199,7 +197,7 @@ ids = [record["id"] for record in all_records]
 
 files = [id + ".pkl" for id in ids]
 
-dir = "esg_pickle"
+dir = "education_pickle"
 
 files_in_dir = os.listdir(dir)
 
@@ -215,40 +213,24 @@ for file in files_in_dir:
         file_id = file.split(".")[0]
 
         vectors = []
-        fulltext_list = []
         for index, e in enumerate(embeddings):
-            fulltext_list.append(
-                {
-                    "sortNumber": index,
-                    "pageNumber": data[index][1],
-                    "text": data[index][0],
-                    "reportId": file_id,
-                }
-            )
             vectors.append(
                 {
                     "id": file_id + "_" + str(index),
                     "values": e.embedding,
                     "metadata": {
-                        "text": data[index][0],
+                        "text": data[index],
                         "rec_id": file_id,
+                        "course": all_records[ids.index(file_id)]["course"],
+
                     },
                 }
             )
 
-        n = len(fulltext_list)
-        for i in range(0, n, 500):
-            batch = fulltext_list[i : i + 500]
-            result = xata.records().bulk_insert("ESG_Fulltext", {"records": batch})
-
-        logging.info(
-            f"{file_id} fulltext insert finished, with status_code: {result.status_code}"
-        )
-
         upsert_vectors(vectors)
 
         embedded = xata.records().update(
-            "ESG", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
+            "education", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
         )
 
         logging.info(f"{file_id} embedding finished")
