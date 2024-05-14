@@ -48,7 +48,7 @@ def process_docx(file_path):
     with open("txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
 
-directory = "water"
+directory = "test"
 docx_files = glob.glob(os.path.join(directory, "*.docx"))
 
 with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
