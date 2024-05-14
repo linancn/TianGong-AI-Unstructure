@@ -11,6 +11,7 @@ from unstructured.chunking.title import chunk_by_title
 from unstructured.documents.elements import CompositeElement, Table
 from unstructured.partition.docx import partition_docx
 from pinecone import Pinecone
+import logging
 
 load_dotenv()
 
@@ -44,6 +45,15 @@ def openai_embedding(text_list, source: str):
     return vectors
 
 
+def upsert_vectors(vectors):
+    try:
+        index.upsert(
+            vectors=vectors, batch_size=200, namespace="book", show_progress=False
+        )
+    except Exception as e:
+        logging.error(e)
+
+
 def process_in_batches(contents, batch_size=100):
     embedding_vectors = []
     for i in range(0, len(contents), batch_size):
@@ -51,9 +61,7 @@ def process_in_batches(contents, batch_size=100):
         embedding_vector = openai_embedding(
             text_list=batch, source=file_name_without_ext
         )
-        index.upsert(
-            vectors=embedding_vector,
-        )
+        upsert_vectors(embedding_vector)
         embedding_vectors.extend(embedding_vector)
     return embedding_vectors
 
@@ -96,7 +104,7 @@ def extract_text(file_name: str):
     return result_list
 
 
-directory = "water"
+directory = "test"
 
 for file_path in glob.glob(os.path.join(directory, "*.docx")):
     file_name = os.path.basename(file_path)

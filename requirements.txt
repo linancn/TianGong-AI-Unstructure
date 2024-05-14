@@ -7,6 +7,6 @@ PyPDF2
 python-dotenv
 tenacity
 tiktoken
-unstructured[all-docs]
+unstructured[all-docs] == 0.13.3
 weaviate-client
 xata

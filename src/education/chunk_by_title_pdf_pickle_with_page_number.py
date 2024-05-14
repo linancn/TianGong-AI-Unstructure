@@ -1,5 +1,4 @@
 import glob
-import re
 import os
 import tempfile
 import concurrent.futures
@@ -10,7 +9,6 @@ import pickle
 from io import StringIO
 from bs4 import BeautifulSoup
 
-# from openai import OpenAI
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import clean, group_broken_paragraphs
 from unstructured.documents.elements import (
@@ -28,8 +26,6 @@ from tools.vision import vision_completion
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# client = OpenAI()
 
 
 def check_misc(text):
@@ -55,14 +51,15 @@ def check_misc(text):
         "Read Online",
     ]
 
-    text = str(text).strip()
-    text = text.replace(" ", "")
-    text = text.replace("\n", "")
-    text = text.replace("\t", "")
-    text = text.replace(":", "")
-    text = text.replace("：", "")
-    text = text.upper()
-
+    text = (
+        text.strip()
+        .replace(" ", "")
+        .replace("\n", "")
+        .replace("\t", "")
+        .replace(":", "")
+        .replace("：", "")
+        .upper()
+    )
     return any(keyword in text for keyword in keywords_for_misc)
 
 
@@ -73,7 +70,6 @@ def extract_filename(path):
 
 
 def num_tokens_from_string(string: str) -> int:
-    """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding("cl100k_base")
     num_tokens = len(encoding.encode(string))
     return num_tokens
@@ -99,7 +95,6 @@ def sci_chunk(pdf_path, vision=False):
         filename=pdf_path,
         header_footer=False,
         pdf_extract_images=False,
-        # pdf_extract_images=vision,
         pdf_image_output_dir_path=tempfile.gettempdir(),
         skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
         strategy="hi_res",
@@ -121,6 +116,7 @@ def sci_chunk(pdf_path, vision=False):
     text_list = []
     for element in filtered_elements:
         if element.text != "":
+            page_number = element.metadata.page_number
             element.text = group_broken_paragraphs(str(element.text))
             element.text = clean(
                 element.text,
@@ -129,14 +125,14 @@ def sci_chunk(pdf_path, vision=False):
                 dashes=False,
                 trailing_punctuation=False,
             )
-        if vision:
-            if isinstance(element, Image):
-                point1 = element.metadata.coordinates.points[0]
-                point2 = element.metadata.coordinates.points[2]
-                width = abs(point2[0] - point1[0])
-                height = abs(point2[1] - point1[1])
-                if width >= min_image_width and height >= min_image_height:
-                    element.text = vision_completion(element.metadata.image_path)
+            text_list.append((element.text, page_number))
+        if vision and isinstance(element, Image):
+            point1 = element.metadata.coordinates.points[0]
+            point2 = element.metadata.coordinates.points[2]
+            width = abs(point2[0] - point1[0])
+            height = abs(point2[1] - point1[1])
+            if width >= min_image_width and height >= min_image_height:
+                element.text = vision_completion(element.metadata.image_path)
 
     chunks = chunk_by_title(
         elements=filtered_elements,
@@ -146,39 +142,50 @@ def sci_chunk(pdf_path, vision=False):
         max_characters=4096,
     )
 
-    text_list = []
-
+    result_list = []
     for chunk in chunks:
         if isinstance(chunk, CompositeElement):
-            text = str(chunk.text)
-            text_list.append(text)
+            text = chunk.text
+            page_number = chunk.metadata.page_number
+            result_list.append((str(text), page_number))
         elif isinstance(chunk, (Table, TableChunk)):
             text_as_html = getattr(chunk.metadata, "text_as_html", None)
             text_to_append = (
                 text_as_html if text_as_html is not None else str(chunk.text)
             )
-
-            if text_list:
-                text_list[-1] = text_list[-1] + "\n" + text_to_append
+            page_number = chunk.metadata.page_number
+            if result_list:
+                result_list[-1] = (
+                    result_list[-1][0] + "\n" + text_to_append,
+                    result_list[-1][1],
+                )
             else:
-                text_list.append(text_to_append)
+                result_list.append((text_to_append, page_number))
 
-    result_list = []
-    for text in text_list:
+    final_result_list = []
+    for text, page_number in result_list:
         split_text = str(text).split("\n\n", 1)
         if len(split_text) == 2 and split_text[0].strip():
             title, content = split_text
         else:
-            title = "Default Title"  # Or some other default value
+            title = "Default Title"
             content = text
-        result_list.append((title, content))
-    return fix_utf8(result_list)
+        final_result_list.append((title, content, page_number))
+
+    return fix_utf8(final_result_list)
 
 
 def split_chunks(text_list: list, source: str):
     chunks = []
-    for title, content in text_list:  # Change this line
-        chunks.append({"title": title, "content": content, "source": source})
+    for title, content, page_number in text_list:
+        chunks.append(
+            {
+                "title": title,
+                "content": content,
+                "source": source,
+                "page_number": page_number,
+            }
+        )
     return chunks
 
 
@@ -221,7 +228,7 @@ def merge_pickle_list(data):
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
-                    if table_content:  # 确保表格内容不为空
+                    if table_content:
                         result.append(table_content)
                 else:
                     try:
@@ -246,24 +253,43 @@ def merge_pickle_list(data):
 
 def process_pdf(file_path):
     record_id = os.path.splitext(os.path.basename(file_path))[0]
+    try:
+        text_list = sci_chunk(file_path)
 
-    text_list = sci_chunk(file_path)
+        if not text_list:
+            logging.warning(f"No text extracted from {file_path}")
+            return
 
-    with open(f"pickle/{record_id}.pkl", "wb") as f:
-        pickle.dump(text_list, f)
+        pickle_file = f"pickle/{record_id}.pkl"
+        with open(pickle_file, "wb") as f:
+            pickle.dump(text_list, f)
+        # logging.info(f"Saved pickle file: {pickle_file}")
 
-    text_str = "\n----------\n".join(
-        [f"{title}\n{content}" for title, content in text_list]
-    )
+        text_str_list = [
+            "Page {}: {}\n{}".format(page_number, title, content)
+            for title, content, page_number in text_list
+        ]
+        text_str = "\n----------\n".join(text_str_list)
 
-    with open(f"txt/{record_id}.txt", "w") as f:
-        f.write(text_str)
+        txt_file = f"txt/{record_id}.txt"
+        with open(txt_file, "w") as f:
+            f.write(text_str)
+        # logging.info(f"Saved txt file: {txt_file}")
+
+    except Exception as e:
+        logging.error(f"Error processing {file_path}: {e}")
 
 
-directory = "test"
-pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
-    executor.map(process_pdf, pdf_files)
+    directory = "test"
+    pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
 
-print("Data inserted successfully")
+    if not pdf_files:
+        logging.warning(f"No PDF files found in directory {directory}")
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+        executor.map(process_pdf, pdf_files)
+
+    logging.warning("Data processed successfully")

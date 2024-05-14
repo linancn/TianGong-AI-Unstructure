@@ -94,7 +94,7 @@ try:
             ),
         ],
     )
-    directory = "water"
+    directory = "water_docx"
     docx_files = glob.glob(os.path.join(directory, "*.docx"))
     with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
         executor.map(process_docx, docx_files)
