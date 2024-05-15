@@ -88,7 +88,7 @@ def fix_utf8(original_list):
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(items, model="text-embedding-3-small"):
-    text_list = [item for item in items]
+    text_list = [item[0] for item in items]
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
