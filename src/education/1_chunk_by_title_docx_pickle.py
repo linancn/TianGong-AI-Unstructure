@@ -19,7 +19,7 @@ def extract_text(file_name: str):
         multipage_sections=True,
         combine_text_under_n_chars=0,
         new_after_n_chars=None,
-        max_characters=8192,
+        max_characters=4096,
     )
 
     text_list = []
