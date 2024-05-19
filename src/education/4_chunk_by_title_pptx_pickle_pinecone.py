@@ -16,7 +16,7 @@ from xata import XataClient
 load_dotenv()
 
 logging.basicConfig(
-    filename="education_docx_embedding.log",
+    filename="education_pptx_embedding.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",

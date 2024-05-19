@@ -5,6 +5,7 @@ from unstructured.partition.pptx import partition_pptx
 import concurrent.futures
 import pickle
 
+
 def extract_text(file_name: str):
     prs = Presentation(file_name)
     elements = partition_pptx(
@@ -36,28 +37,28 @@ def extract_text(file_name: str):
         else:
             element_text.append(str(slide_elements))
 
-        combined_text = (
-            f"{slide_text.strip()}\n\n{notes_text.strip()}\n\n{' '.join(element_text)}"
-        )
+        combined_text = f"Page: {i+1}\n{slide_text.strip()}\n\n{notes_text.strip()}\n\n{' '.join(element_text)}"
 
         result_list.append(combined_text)
 
     return result_list
+
 
 def process_pptx(file_path):
     record_id = os.path.splitext(os.path.basename(file_path))[0]
 
     text_list = extract_text(file_path)
 
-    with open("pickle/" + record_id + ".pkl", "wb") as f:
+    with open("education_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(map(str, text_list))
 
-    with open("txt/" + record_id + ".txt", "w") as f:
+    with open("education_txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
 
-directory = "test"
+
+directory = "docs/education"
 pptx_files = glob.glob(os.path.join(directory, "*.pptx"))
 
 with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:

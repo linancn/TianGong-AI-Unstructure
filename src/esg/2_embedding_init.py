@@ -215,14 +215,14 @@ for file in files_in_dir:
         vectors = []
         fulltext_list = []
         for index, e in enumerate(embeddings):
-            fulltext_list.append(
-                {
-                    "sortNumber": index,
-                    "pageNumber": data[index][1],
-                    "text": data[index][0],
-                    "reportId": file_id,
-                }
-            )
+            # fulltext_list.append(
+            #     {
+            #         "sortNumber": index,
+            #         "pageNumber": data[index][1],
+            #         "text": data[index][0],
+            #         "reportId": file_id,
+            #     }
+            # )
             vectors.append(
                 {
                     "id": file_id + "_" + str(index),
@@ -230,18 +230,19 @@ for file in files_in_dir:
                     "metadata": {
                         "text": data[index][0],
                         "rec_id": file_id,
+                        "page_number": data[index][1],
                     },
                 }
             )
 
-        n = len(fulltext_list)
-        for i in range(0, n, 500):
-            batch = fulltext_list[i : i + 500]
-            result = xata.records().bulk_insert("ESG_Fulltext", {"records": batch})
+        # n = len(fulltext_list)
+        # for i in range(0, n, 500):
+        #     batch = fulltext_list[i : i + 500]
+        #     result = xata.records().bulk_insert("ESG_Fulltext", {"records": batch})
 
-        logging.info(
-            f"{file_id} fulltext insert finished, with status_code: {result.status_code}"
-        )
+        # logging.info(
+        #     f"{file_id} fulltext insert finished, with status_code: {result.status_code}"
+        # )
 
         upsert_vectors(vectors)
 
