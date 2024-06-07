@@ -30,25 +30,25 @@ load_dotenv()
 
 def check_misc(text):
     keywords_for_misc = [
-        "ACKNOWLEDGEMENTS",
-        "ACKNOWLEDGMENTS",
-        "ACKNOWLEDGEMENT",
-        "ACKNOWLEDGMENT",
-        "BIBLIOGRAPHY",
-        "DATAAVAILABILITY",
-        "DECLARATIONOFCOMPETINGINTEREST",
-        "REFERENCES",
-        "SUPPLEMENTARYINFORMATION",
-        "SUPPLEMENTARYMATERIALS",
-        "SUPPORTINGINFORMATION",
-        "参考文献",
-        "致谢",
-        "謝",
-        "謝辞",
-        "AUTHOR INFORMATION",
-        "ABBREVIATIONS",
-        "ASSOCIATED CONTENT",
-        "Read Online",
+        # "ACKNOWLEDGEMENTS",
+        # "ACKNOWLEDGMENTS",
+        # "ACKNOWLEDGEMENT",
+        # "ACKNOWLEDGMENT",
+        # "BIBLIOGRAPHY",
+        # "DATAAVAILABILITY",
+        # "DECLARATIONOFCOMPETINGINTEREST",
+        # "REFERENCES",
+        # "SUPPLEMENTARYINFORMATION",
+        # "SUPPLEMENTARYMATERIALS",
+        # "SUPPORTINGINFORMATION",
+        # "参考文献",
+        # "致谢",
+        # "謝",
+        # "謝辞",
+        # "AUTHOR INFORMATION",
+        # "ABBREVIATIONS",
+        # "ASSOCIATED CONTENT",
+        # "Read Online",
     ]
 
     text = (
@@ -256,7 +256,7 @@ def process_pdf(file_path):
     try:
         text_list = sci_chunk(file_path)
 
-        pickle_file = "education_pickle/" + record_id + ".pdf_pn" + ".pkl"
+        pickle_file = "test/pickle/" + record_id + ".pdf_pn" + ".pkl"
         with open(pickle_file, "wb") as f:
             pickle.dump(text_list, f)
 
@@ -266,7 +266,7 @@ def process_pdf(file_path):
         ]
         text_str = "\n----------\n".join(text_str_list)
 
-        txt_file = "education_txt/" + record_id + ".pdf_pn" + ".txt"
+        txt_file = "test/txt/" + record_id + ".pdf_pn" + ".txt"
         with open(txt_file, "w") as f:
             f.write(text_str)
 
@@ -275,7 +275,7 @@ def process_pdf(file_path):
 
 
 if __name__ == "__main__":
-    directory = "docs/education"
+    directory = "test/1"
     pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:

@@ -49,16 +49,16 @@ def process_pptx(file_path):
 
     text_list = extract_text(file_path)
 
-    with open("education_pickle/" + record_id + ".pptx" + ".pkl", "wb") as f:
+    with open("test/pickle/" + record_id + ".pptx" + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(map(str, text_list))
 
-    with open("education_txt/" + record_id + ".pptx" + ".txt", "w") as f:
+    with open("test/txt/" + record_id + ".pptx" + ".txt", "w") as f:
         f.write(text_str)
 
 
-directory = "docs/education"
+directory = "test"
 pptx_files = glob.glob(os.path.join(directory, "*.pptx"))
 
 with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:

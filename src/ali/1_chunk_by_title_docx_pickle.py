@@ -72,14 +72,14 @@ def process_docx(file_path):
 
     text_str = "\n----------\n".join(map(str, merged_text_list))
 
-    with open("education_pickle/" + record_id + ".docx" + ".pkl", "wb") as f:
+    with open("test/pickle/" + record_id + ".docx" + ".pkl", "wb") as f:
         pickle.dump(merged_text_list, f)
 
-    with open("education_txt/" + record_id + ".docx" + ".txt", "w") as f:
+    with open("test/txt/" + record_id + ".docx" + ".txt", "w") as f:
         f.write(text_str)
 
 
-directory = "docs/education"
+directory = "test"
 docx_files = glob.glob(os.path.join(directory, "*.docx"))
 
 with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
