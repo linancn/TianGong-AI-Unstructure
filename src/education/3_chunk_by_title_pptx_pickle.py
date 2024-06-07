@@ -49,12 +49,12 @@ def process_pptx(file_path):
 
     text_list = extract_text(file_path)
 
-    with open("education_pickle/" + record_id + ".pkl", "wb") as f:
+    with open("education_pickle/" + record_id + ".pptx" + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(map(str, text_list))
 
-    with open("education_txt/" + record_id + ".txt", "w") as f:
+    with open("education_txt/" + record_id + ".pptx" + ".txt", "w") as f:
         f.write(text_str)
 
 

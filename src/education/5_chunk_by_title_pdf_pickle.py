@@ -221,7 +221,7 @@ def merge_pickle_list(data):
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
-                    if table_content:  # 确保表格内容不为空
+                    if table_content:  
                         result.append(table_content)
                 else:
                     try:
@@ -249,18 +249,18 @@ def process_pdf(file_path):
 
     text_list = sci_chunk(file_path)
 
-    with open(f"pickle/{record_id}.pkl", "wb") as f:
+    with open("education_pickle/" + record_id + ".pdf" + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(
-        [f"{title}\n{content}" for title, content in text_list]
+        f"{title}\n{content}" for title, content in text_list
     )
 
-    with open(f"txt/{record_id}.txt", "w") as f:
+    with open("education_txt/" + record_id + ".pdf" + ".txt", "w") as f:
         f.write(text_str)
 
 
-directory = "test"
+directory = "docs/education"
 pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
 
 with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:

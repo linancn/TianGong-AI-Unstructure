@@ -256,40 +256,29 @@ def process_pdf(file_path):
     try:
         text_list = sci_chunk(file_path)
 
-        if not text_list:
-            logging.warning(f"No text extracted from {file_path}")
-            return
-
-        pickle_file = f"pickle/{record_id}.pkl"
+        pickle_file = "education_pickle/" + record_id + ".pdf_pn" + ".pkl"
         with open(pickle_file, "wb") as f:
             pickle.dump(text_list, f)
-        # logging.info(f"Saved pickle file: {pickle_file}")
 
         text_str_list = [
-            "Page {}: {}\n{}".format(page_number, title, content)
+            "Page {}:\n{}\n{}".format(page_number, title, content)
             for title, content, page_number in text_list
         ]
         text_str = "\n----------\n".join(text_str_list)
 
-        txt_file = f"txt/{record_id}.txt"
+        txt_file = "education_txt/" + record_id + ".pdf_pn" + ".txt"
         with open(txt_file, "w") as f:
             f.write(text_str)
-        # logging.info(f"Saved txt file: {txt_file}")
 
     except Exception as e:
-        logging.error(f"Error processing {file_path}: {e}")
+        print(f"Error processing {file_path}: {e}")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
-
-    directory = "test"
+    directory = "docs/education"
     pdf_files = glob.glob(os.path.join(directory, "*.pdf"))
 
-    if not pdf_files:
-        logging.warning(f"No PDF files found in directory {directory}")
-
-    with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
         executor.map(process_pdf, pdf_files)
 
-    logging.warning("Data processed successfully")
+    print("Data processed successfully")

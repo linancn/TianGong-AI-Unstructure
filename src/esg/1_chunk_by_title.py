@@ -94,13 +94,13 @@ def safe_process_pdf(record):
         return None
 
 
-# record = {"id": "rec_cm1roi6q2mhohok8sgc0", "language": "eng"}
+record = {"id": "af183ae1-c64b-417a-a19d-bf4d9611ce90", "language": "chi_sim"}
 
-# safe_process_pdf(record)
+safe_process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-    executor.map(safe_process_pdf, records)
+# with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+#     executor.map(safe_process_pdf, records)

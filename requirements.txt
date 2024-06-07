@@ -2,11 +2,13 @@ arrow
 openai
 oss2
 pinecone-client
+psycopg2-binary
 Pyarrow
 PyPDF2
 python-dotenv
 tenacity
 tiktoken
-unstructured[all-docs] == 0.13.3
+# unstructured[all-docs] == 0.13.3
+unstructured[all-docs]
 weaviate-client
 xata

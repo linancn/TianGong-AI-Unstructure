@@ -33,8 +33,8 @@ xata = XataClient(
     db_url=xata_db_url,
 )
 
-pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
-idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
+pc = Pinecone(api_key=os.getenv("PINECONE_SERVERLESS_API_KEY"))
+idx = pc.Index(os.getenv("PINECONE_SERVERLESS_INDEX_NAME"))
 
 
 def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
@@ -73,8 +73,7 @@ def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding("cl100k_base")
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
+    return len(encoding.encode(string))
 
 
 def fix_utf8(original_list):
@@ -92,7 +91,6 @@ def get_embeddings(items, model="text-embedding-3-small"):
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
         results = []
-
         for i in range(0, length, 1000):
             result = client.embeddings.create(
                 input=text_list[i : i + 1000], model=model
@@ -101,10 +99,8 @@ def get_embeddings(items, model="text-embedding-3-small"):
         return results
 
     except Exception as e:
-        print(e)
-
-
-# [Embedding(embedding=[], index=0, object='embedding'),Embedding(embedding=[], index=0, object='embedding')]
+        logging.error(f"Error generating embeddings: {e}")
+        raise
 
 
 def load_pickle_list(file_path):
@@ -163,7 +159,7 @@ def merge_pickle_list(data):
                                 soup = BeautifulSoup(sub_table, "html.parser")
                                 result.append(str(soup))
                     except Exception as e:
-                        logging.error(e)
+                        logging.error(f"Error splitting dataframe table: {e}")
         elif num_tokens_from_string(d) < 15:
             temp += d + " "
         else:
@@ -182,57 +178,75 @@ def upsert_vectors(vectors):
             vectors=vectors, batch_size=200, namespace="education", show_progress=False
         )
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Error upserting vectors: {e}")
+        raise
 
 
 table_name = "education"
-columns = ["id","course"]
-filter = {"$all": [{"$notExists": "embedding_time"}]}
+columns = ["id", "course", "embedding_time"]
+filter = {}
 
 all_records = fetch_all_records(xata, table_name, columns, filter)
 
 ids = [record["id"] for record in all_records]
 
-files = [id + ".pkl" for id in ids]
-
 dir = "education_pickle"
 
 files_in_dir = os.listdir(dir)
 
-for file in files_in_dir:
+# Filter out files with ".docx" in their names
+docx_files_in_dir = [file for file in files_in_dir if ".docx" in file]
 
+# Remove ".docx.pkl" from the file names for further processing
+files_without_extension = [file.replace(".docx.pkl", "") for file in docx_files_in_dir]
+
+for file_without_extension in files_without_extension:
     try:
-        file_path = os.path.join(dir, file)
-        data = load_pickle_list(file_path)
-        data = merge_pickle_list(data)
-        data = fix_utf8(data)
-        embeddings = get_embeddings(data)
-
-        file_id = file.split(".")[0]
-
-        vectors = []
-        for index, e in enumerate(embeddings):
-            vectors.append(
-                {
-                    "id": file_id + "_" + str(index),
-                    "values": e.embedding,
-                    "metadata": {
-                        "text": data[index],
-                        "rec_id": file_id,
-                        "course": all_records[ids.index(file_id)]["course"],
-
-                    },
-                }
-            )
-
-        upsert_vectors(vectors)
-
-        embedded = xata.records().update(
-            "education", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
+        record = next(
+            (
+                record
+                for record in all_records
+                if record["id"] == file_without_extension
+            ),
+            None,
         )
+        if record:
+            if "embedding_time" in record and record["embedding_time"] is not None:
+                logging.info(
+                    f"No embedding needed for file_id: {file_without_extension}"
+                )
+                continue
 
-        logging.info(f"{file_id} embedding finished")
+            file_path = os.path.join(dir, file_without_extension + ".docx.pkl")
+
+            data = load_pickle_list(file_path)
+            data = merge_pickle_list(data)
+            data = fix_utf8(data)
+            embeddings = get_embeddings(data)
+
+            file_id = file_without_extension
+
+            vectors = []
+            for index, e in enumerate(embeddings):
+                vectors.append(
+                    {
+                        "id": file_id + "_" + str(index),
+                        "values": e.embedding,
+                        "metadata": {
+                            "text": data[index],
+                            "rec_id": file_id,
+                            "course": record["course"],
+                        },
+                    }
+                )
+
+            upsert_vectors(vectors)
+
+            xata.records().update(
+                "education", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
+            )
+            logging.info(f"Embedding finished for file_id: {file_id}")
 
     except Exception as e:
-        logging.error(e)
+        logging.error(f"Error processing file {file_path}: {e}")
         continue
