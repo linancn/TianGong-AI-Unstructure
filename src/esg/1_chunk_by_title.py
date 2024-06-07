@@ -2,72 +2,87 @@ import concurrent.futures
 import os
 import pickle
 
+import psycopg2
 from dotenv import load_dotenv
 from tools.unstructure_pdf import unstructure_pdf
 from xata.client import XataClient
 
 load_dotenv()
 
-xata = XataClient(
-    api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_ESG_DB_URL")
+# xata = XataClient(
+#     api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_ESG_DB_URL")
+# )
+
+# table_name = "ESG"
+# columns = ["id", "language"]
+# filter = {"$notExists": "embedding_time"}
+
+
+# def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
+#     all_records = []
+#     cursor = None
+#     more = True
+
+#     while more:
+#         page = {"size": page_size}
+#         if not cursor:
+#             results = xata.data().query(
+#                 table_name,
+#                 {
+#                     "page": page,
+#                     "columns": columns,
+#                     "filter": filter,
+#                 },
+#             )
+#         else:
+#             page["after"] = cursor
+#             results = xata.data().query(
+#                 table_name,
+#                 {
+#                     "page": page,
+#                     "columns": columns,
+#                 },
+#             )
+
+#         all_records.extend(results["records"])
+#         cursor = results["meta"]["page"]["cursor"]
+#         more = results["meta"]["page"]["more"]
+
+#     return all_records
+
+
+# records = fetch_all_records(xata, table_name, columns, filter)
+
+
+conn_pg = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
 )
 
-table_name = "ESG"
-columns = ["id", "language"]
-filter = {"$notExists": "embedding_time"}
+with conn_pg.cursor() as cur:
+    cur.execute("SELECT id, language FROM esg_meta WHERE embedded_time IS NULL")
+    records = cur.fetchall()
 
-
-def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
-    all_records = []
-    cursor = None
-    more = True
-
-    while more:
-        page = {"size": page_size}
-        if not cursor:
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                    "filter": filter,
-                },
-            )
-        else:
-            page["after"] = cursor
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                },
-            )
-
-        all_records.extend(results["records"])
-        cursor = results["meta"]["page"]["cursor"]
-        more = results["meta"]["page"]["more"]
-
-    return all_records
-
-
-records = fetch_all_records(xata, table_name, columns, filter)
 
 files = os.listdir("esg_pickle")
 
 id = [file[:-4] for file in files]
 
-records = [record for record in records if record["id"] not in id]
+records = [record for record in records if record[0] not in id]
 
 # ids = [record["id"] for record in records]
 # print(ids)
 
 
 def process_pdf(record):
-    record_id = record["id"]
-    if record["language"] == "eng":
+    record_id = record[0]
+    if record[1] == "eng":
         language = ["eng"]
     else:
-        language = [record["language"], "eng"]
+        language = [record[1], "eng"]
 
     text_list = unstructure_pdf(
         pdf_name="docs/esg/" + record_id + ".pdf", languages=language
@@ -94,13 +109,13 @@ def safe_process_pdf(record):
         return None
 
 
-record = {"id": "af183ae1-c64b-417a-a19d-bf4d9611ce90", "language": "chi_sim"}
+# record = {"id": "af183ae1-c64b-417a-a19d-bf4d9611ce90", "language": "chi_sim"}
 
-safe_process_pdf(record)
+# safe_process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
 
-# with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-#     executor.map(safe_process_pdf, records)
+with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+    executor.map(safe_process_pdf, records)
