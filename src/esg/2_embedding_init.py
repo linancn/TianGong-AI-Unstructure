@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
+from xata import XataClient
 
 load_dotenv()
 
@@ -24,6 +25,14 @@ logging.basicConfig(
 )
 
 client = OpenAI()
+
+# xata_api_key = os.getenv("XATA_API_KEY")
+# xata_db_url = os.getenv("XATA_ESG_DB_URL")
+
+# xata = XataClient(
+#     api_key=xata_api_key,
+#     db_url=xata_db_url,
+# )
 
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
@@ -156,7 +165,8 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, language FROM esg_meta WHERE uploaded_time IS NOT NULL AND embedded_time IS NULL"
+        # "SELECT id, language FROM esg_meta WHERE uploaded_time IS NOT NULL AND embedded_time IS NULL"
+        "SELECT id, language FROM esg_meta WHERE id = 'af183ae1-c64b-417a-a19d-bf4d9611ce90'"
     )
     records = cur.fetchall()
 
@@ -182,14 +192,14 @@ for file in files:
         vectors = []
         fulltext_list = []
         for index, e in enumerate(embeddings):
-            # fulltext_list.append(
-            #     {
-            #         "sortNumber": index,
-            #         "pageNumber": data[index][1],
-            #         "text": data[index][0],
-            #         "reportId": file_id,
-            #     }
-            # )
+            fulltext_list.append(
+                {
+                    "sortNumber": index,
+                    "pageNumber": data[index][1],
+                    "text": data[index][0],
+                    "reportId": file_id,
+                }
+            )
             vectors.append(
                 {
                     "id": file_id + "_" + str(index),
@@ -207,7 +217,7 @@ for file in files:
         #     batch = fulltext_list[i : i + 500]
         #     result = xata.records().bulk_insert("ESG_Fulltext", {"records": batch})
 
-        # logging.info(
+        # # logging.info(
         #     f"{file_id} fulltext insert finished, with status_code: {result.status_code}"
         # )
 
