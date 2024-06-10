@@ -4,15 +4,17 @@ import pickle
 from datetime import UTC, datetime
 from io import StringIO
 
+import boto3
 import pandas as pd
 import psycopg2
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
+from opensearchpy import OpenSearch, RequestsHttpConnection, helpers
 from pinecone import Pinecone
+from requests_aws4auth import AWS4Auth
 from tenacity import retry, stop_after_attempt, wait_fixed
-from xata import XataClient
 
 load_dotenv()
 
@@ -26,13 +28,25 @@ logging.basicConfig(
 
 client = OpenAI()
 
-# xata_api_key = os.getenv("XATA_API_KEY")
-# xata_db_url = os.getenv("XATA_ESG_DB_URL")
+region = "us-east-1"
+service = "aoss"
+credentials = boto3.Session().get_credentials()
+awsauth = AWS4Auth(
+    credentials.access_key,
+    credentials.secret_key,
+    region,
+    service,
+    session_token=credentials.token,
+)
 
-# xata = XataClient(
-#     api_key=xata_api_key,
-#     db_url=xata_db_url,
-# )
+opensearch_client = OpenSearch(
+    hosts=[{"host": os.environ.get("OPENSEARCH_ESG_URL"), "port": 443}],
+    http_auth=awsauth,
+    use_ssl=True,
+    verify_certs=True,
+    connection_class=RequestsHttpConnection,
+    timeout=300,
+)
 
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
@@ -71,9 +85,6 @@ def get_embeddings(items, model="text-embedding-3-small"):
 
     except Exception as e:
         print(e)
-
-
-# [Embedding(embedding=[], index=0, object='embedding'),Embedding(embedding=[], index=0, object='embedding')]
 
 
 def load_pickle_list(file_path):
@@ -165,8 +176,7 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        # "SELECT id, language FROM esg_meta WHERE uploaded_time IS NOT NULL AND embedded_time IS NULL"
-        "SELECT id, language FROM esg_meta WHERE id = 'af183ae1-c64b-417a-a19d-bf4d9611ce90'"
+        "SELECT id FROM esg_meta WHERE uploaded_time IS NOT NULL AND embedded_time IS NULL"
     )
     records = cur.fetchall()
 
@@ -176,7 +186,6 @@ files = [id + ".pkl" for id in ids]
 
 dir = "esg_pickle"
 
-# files_in_dir = os.listdir(dir)
 
 for file in files:
 
@@ -185,19 +194,23 @@ for file in files:
         data = load_pickle_list(file_path)
         data = merge_pickle_list(data)
         data = fix_utf8(data)
-        embeddings = get_embeddings(data)
+        # embeddings = get_embeddings(data)
 
         file_id = file.split(".")[0]
 
         vectors = []
         fulltext_list = []
-        for index, e in enumerate(embeddings):
+        for index, e in enumerate(data):
             fulltext_list.append(
                 {
-                    "sortNumber": index,
-                    "pageNumber": data[index][1],
-                    "text": data[index][0],
-                    "reportId": file_id,
+                    "_op_type": "index",
+                    "_index": "esg",
+                    "_id": file_id + "_" + str(index),
+                    "_source": {
+                        "pageNumber": data[index][1],
+                        "text": data[index][0],
+                        "reportId": file_id,
+                    },
                 }
             )
             vectors.append(
@@ -212,14 +225,12 @@ for file in files:
                 }
             )
 
-        # n = len(fulltext_list)
-        # for i in range(0, n, 500):
-        #     batch = fulltext_list[i : i + 500]
-        #     result = xata.records().bulk_insert("ESG_Fulltext", {"records": batch})
+        n = len(fulltext_list)
+        for i in range(0, n, 500):
+            batch = fulltext_list[i : i + 500]
+            helpers.bulk(opensearch_client, batch)
 
-        # # logging.info(
-        #     f"{file_id} fulltext insert finished, with status_code: {result.status_code}"
-        # )
+        logging.info(f"{file_id} fulltext insert finished.")
 
         upsert_vectors(vectors)
 

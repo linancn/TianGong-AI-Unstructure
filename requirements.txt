@@ -1,11 +1,14 @@
 arrow
+boto3
 openai
+opensearch-py
 oss2
 pinecone-client
 psycopg2-binary
 Pyarrow
 PyPDF2
 python-dotenv
+requests-aws4auth
 tenacity
 tiktoken
 # unstructured[all-docs] == 0.13.3
