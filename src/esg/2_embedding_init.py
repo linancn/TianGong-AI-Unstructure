@@ -194,13 +194,13 @@ for file in files:
         data = load_pickle_list(file_path)
         data = merge_pickle_list(data)
         data = fix_utf8(data)
-        # embeddings = get_embeddings(data)
+        embeddings = get_embeddings(data)
 
         file_id = file.split(".")[0]
 
         vectors = []
         fulltext_list = []
-        for index, e in enumerate(data):
+        for index, e in enumerate(embeddings):
             fulltext_list.append(
                 {
                     "_op_type": "index",
