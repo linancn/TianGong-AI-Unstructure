@@ -16,7 +16,7 @@ from xata import XataClient
 load_dotenv()
 
 logging.basicConfig(
-    filename="education_docx_embedding.log",
+    filename="education_pdf_embedding.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -78,19 +78,33 @@ def num_tokens_from_string(string: str) -> int:
 
 def fix_utf8(original_list):
     cleaned_list = []
-    for original_str in original_list:
-        cleaned_str = original_str.replace("\ufffd", " ")
-        cleaned_list.append(cleaned_str)
+    for item in original_list:
+        if isinstance(item, tuple):
+            if len(item) == 2:
+                title, original_str = item
+            else:
+                continue
+            cleaned_str = original_str.replace("\ufffd", " ")
+            cleaned_list.append((title, cleaned_str))
+        elif isinstance(item, str):
+            cleaned_str = item.replace("\ufffd", " ")
+            cleaned_list.append(cleaned_str)
+        else:
+            logging.error(f"Unexpected item type: {type(item)} in item: {item}")
     return cleaned_list
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(items, model="text-embedding-3-small"):
-    text_list = [item for item in items]
+    text_list = [
+        item[1] if isinstance(item, tuple) and len(item) >= 2 else item
+        for item in items
+    ]
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
         results = []
+
         for i in range(0, length, 1000):
             result = client.embeddings.create(
                 input=text_list[i : i + 1000], model=model
@@ -142,31 +156,39 @@ def split_dataframe_table(html_table, chunk_size=8100):
 def merge_pickle_list(data):
     temp = ""
     result = []
-    for d in data:
+    for item in data:
+        if isinstance(item, tuple):
+            if len(item) == 2:
+                title, d = item
+            else:
+                continue
+        else:
+            d, title = item, "Default Title"
+
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
-                    if table_content:  # 确保表格内容不为空
-                        result.append(table_content)
+                    if table_content:
+                        result.append((title, table_content))
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append(str(soup))
+                                result.append((title, str(soup)))
                     except Exception as e:
                         logging.error(f"Error splitting dataframe table: {e}")
         elif num_tokens_from_string(d) < 15:
             temp += d + " "
         else:
-            result.append((temp + d))
+            result.append((title, temp + d))
             temp = ""
     if temp:
-        result.append(temp)
+        result.append((title, temp))
 
     return result
 
@@ -184,7 +206,7 @@ def upsert_vectors(vectors):
 
 table_name = "education"
 columns = ["id", "course", "embedding_time"]
-filter = {}
+filter = {"$all": [{"$notExists": "embedding_time"}]}
 
 all_records = fetch_all_records(xata, table_name, columns, filter)
 
@@ -194,11 +216,11 @@ dir = "education_pickle"
 
 files_in_dir = os.listdir(dir)
 
-# Filter out files with ".docx" in their names
-docx_files_in_dir = [file for file in files_in_dir if ".docx" in file]
+# Filter out files with ".pdf" in their names
+pdf_files_in_dir = [file for file in files_in_dir if ".pdf" in file]
 
-# Remove ".docx.pkl" from the file names for further processing
-files_without_extension = [file.replace(".docx.pkl", "") for file in docx_files_in_dir]
+# Remove ".pdf.pkl" from the file names for further processing
+files_without_extension = [file.replace(".pdf.pkl", "") for file in pdf_files_in_dir]
 
 for file_without_extension in files_without_extension:
     try:
@@ -217,7 +239,7 @@ for file_without_extension in files_without_extension:
                 )
                 continue
 
-            file_path = os.path.join(dir, file_without_extension + ".docx.pkl")
+            file_path = os.path.join(dir, file_without_extension + ".pdf.pkl")
 
             data = load_pickle_list(file_path)
             data = merge_pickle_list(data)
@@ -228,12 +250,15 @@ for file_without_extension in files_without_extension:
 
             vectors = []
             for index, e in enumerate(embeddings):
+                text_with_page = (
+                    data[index][1] if isinstance(data[index], tuple) else data[index]
+                )
                 vectors.append(
                     {
                         "id": file_id + "_" + str(index),
                         "values": e.embedding,
                         "metadata": {
-                            "text": data[index],
+                            "text": text_with_page,
                             "rec_id": file_id,
                             "course": record["course"],
                         },

@@ -1,6 +1,7 @@
 import tempfile
 
 from dotenv import load_dotenv
+from tools.vision import vision_completion
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import clean, group_broken_paragraphs
 from unstructured.documents.elements import (
@@ -12,12 +13,10 @@ from unstructured.documents.elements import (
 )
 from unstructured.partition.auto import partition
 
-from tools.vision import vision_completion
-
 load_dotenv()
 
 
-def unstructure_pdf(pdf_name, extract_images=False):
+def unstructure_pdf(pdf_name, languages=["chi_sim", "eng"], extract_images=False):
     min_image_width = 250
     min_image_height = 270
 
@@ -28,7 +27,7 @@ def unstructure_pdf(pdf_name, extract_images=False):
         skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
         strategy="hi_res",
         hi_res_model_name="yolox",
-        languages=["eng", "chi_sim"],
+        languages=languages,
     )
 
     filtered_elements = [
@@ -67,14 +66,17 @@ def unstructure_pdf(pdf_name, extract_images=False):
     text_list = []
     for chunk in chunks:
         if isinstance(chunk, CompositeElement):
-            text = chunk.text
+            text = str(chunk.text)
             page_number = chunk.metadata.page_number
-            text_list.append(text, page_number)
+            text_list.append((text, page_number))
         elif isinstance(chunk, Table):
             if text_list:
-                text_list[-1] = text_list[-1] + "\n\n" + chunk.metadata.text_as_html
+                text_list[-1] = (
+                    text_list[-1][0] + "\n\n" + chunk.metadata.text_as_html,
+                    text_list[-1][1],
+                )
             else:
                 page_number = chunk.metadata.page_number
-                text_list.append(chunk.metadata.text_as_html)
+                text_list.append((chunk.metadata.text_as_html, page_number))
 
     return text_list
