@@ -5,13 +5,13 @@ from datetime import UTC, datetime
 from io import StringIO
 
 import pandas as pd
+import psycopg2
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
-from xata import XataClient
 
 load_dotenv()
 
@@ -25,49 +25,9 @@ logging.basicConfig(
 
 client = OpenAI()
 
-xata_api_key = os.getenv("XATA_API_KEY")
-xata_db_url = os.getenv("XATA_DOCS_DB_URL")
-
-xata = XataClient(
-    api_key=xata_api_key,
-    db_url=xata_db_url,
-)
 
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
-
-
-def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
-    all_records = []
-    cursor = None
-    more = True
-
-    while more:
-        page = {"size": page_size}
-        if not cursor:
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                    "filter": filter,
-                },
-            )
-        else:
-            page["after"] = cursor
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                },
-            )
-
-        all_records.extend(results["records"])
-        cursor = results["meta"]["page"]["cursor"]
-        more = results["meta"]["page"]["more"]
-
-    return all_records
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -190,9 +150,21 @@ table_name = "reports"
 columns = ["id"]
 filter = {"$all": [{"$notExists": "embedding_time"}]}
 
-all_records = fetch_all_records(xata, table_name, columns, filter)
+conn_pg = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
+)
 
-ids = [record["id"] for record in all_records]
+with conn_pg.cursor() as cur:
+    cur.execute(
+        "SELECT id FROM reports WHERE uploaded_time IS NOT NULL AND embedded_time IS NULL"
+    )
+    records = cur.fetchall()
+
+ids = [record[0] for record in records]
 
 files = [id + ".pkl" for id in ids]
 
@@ -226,12 +198,17 @@ for file in files:
 
         upsert_vectors(vectors)
 
-        embedded = xata.records().update(
-            "reports", file_id, {"embedding_time": datetime.now(UTC).isoformat()}
-        )
+        with conn_pg.cursor() as cur:
+            cur.execute(
+                "UPDATE reports SET embedded_time = %s WHERE id = %s",
+                (datetime.now(UTC), file_id),
+            )
+            conn_pg.commit()
 
         logging.info(f"{file_id} embedding finished")
 
     except Exception as e:
         logging.error(e)
         continue
+
+conn_pg.close()
