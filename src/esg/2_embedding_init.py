@@ -246,3 +246,7 @@ for file in files:
     except Exception as e:
         logging.error(e)
         continue
+
+    finally:
+        cur.close()
+        conn_pg.close()

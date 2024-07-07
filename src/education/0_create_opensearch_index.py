@@ -39,7 +39,7 @@ index_body = {
             "course": {
                 "type": "keyword",
             },
-            "docId": {
+            "rec_id": {
                 "type": "keyword",
             },
         },

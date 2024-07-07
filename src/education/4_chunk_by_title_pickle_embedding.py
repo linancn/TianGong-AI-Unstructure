@@ -130,7 +130,7 @@ def merge_pickle_list(data):
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
-                    if table_content:  # 确保表格内容不为空
+                    if table_content:  # check if table_content is not empty
                         result.append(table_content)
                 else:
                     try:
@@ -194,7 +194,7 @@ for file in files:
         data = fix_utf8(data)
         embeddings = get_embeddings(data)
 
-        file_id = file.split(".")[0]  
+        file_id = file.split(".")[0]
         course = courses[file_id]
         language = languages[file_id]
 
@@ -208,7 +208,7 @@ for file in files:
                     "_id": file_id + "_" + str(index),
                     "_source": {
                         "text": data[index],
-                        "docId": file_id,
+                        "rec_id": file_id,
                         "course": course,
                         "language": language,
                     },
