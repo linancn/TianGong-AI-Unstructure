@@ -171,3 +171,6 @@ reports_pickle/
 reports_txt/
 education_pickle/
 education_txt/
+esg_temp
+esg_meta_pickle/
+esg_meta_txt/
