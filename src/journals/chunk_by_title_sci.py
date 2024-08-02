@@ -67,7 +67,7 @@ def safe_sci_chunk(pdf):
 with concurrent.futures.ProcessPoolExecutor(30) as executor:
     executor.map(safe_sci_chunk, pdf_list)
 
-# end_time = time.time()htop
+# end_time = time.time()
 
 
 # print(f"Execution time: {end_time - start_time} seconds")
