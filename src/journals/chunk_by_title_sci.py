@@ -2,106 +2,35 @@ import concurrent.futures
 import os
 from urllib.parse import quote
 
+import psycopg2
+
 from tools.chunk_by_sci_pdf import sci_chunk
-from xata.client import XataClient
-
-# import time
 
 
-xata_api_key = os.getenv("XATA_API_KEY")
-xata_db_url = os.getenv("XATA_DOCS_DB_URL")
-xata = XataClient(api_key=xata_api_key, db_url=xata_db_url)
+conn_pg = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
+)
 
 
-def get_contained_list(list1, list2):
-    return [s2 for s2 in list2 if any(s1["doi"] in s2 for s1 in list1)]
-
-
-table_name = "journals"
-columns = ["doi", "journal", "date"]
-filter = {
-    "$all": [
-        {"$exists": "upload_time"},
-        {"$notExists": "embedding_time"},
-        # {"journal": "JOURNAL OF INDUSTRIAL ECOLOGY"},
-    ]
-}
-
-
-# def get_all_records(
-#     xata, table_name, columns, filter, page_size=1000, offset=0, all_records=[]
-# ):
-#     page = {"size": page_size, "offset": offset}
-
-#     while True:
-#         data = xata.data().query(
-#             table_name,
-#             {
-#                 "page": page,
-#                 "columns": columns,
-#                 "filter": filter,
-#             },
-#         )
-
-#         if not data["records"]:
-#             return all_records
-
-#         all_records.extend(data["records"])
-
-#         return get_all_records(
-#             xata=xata,
-#             table_name=table_name,
-#             columns=columns,
-#             filter=filter,
-#             offset=offset + page_size,
-#             all_records=all_records,
-#         )
-
-
-def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
-    all_records = []
-    cursor = None
-    more = True
-
-    while more:
-        page = {"size": page_size}
-        if not cursor:
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                    "filter": filter,
-                },
-            )
-        else:
-            page["after"] = cursor
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                },
-            )
-
-        all_records.extend(results["records"])
-        cursor = results["meta"]["page"]["cursor"]
-        more = results["meta"]["page"]["more"]
-
-    return all_records
-
-
-all_records = fetch_all_records(xata, table_name, columns, filter)
+with conn_pg.cursor() as cur:
+    cur.execute(
+        "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL AND embedding_time IS NULL"
+    )
+    results = cur.fetchall()
 
 pdf_list = []
-for record in all_records:
-    pdf_path = quote(quote("docs/journals/" + record["doi"] + ".pdf"))
+for record in results:
+    pdf_path = quote(quote("docs/journals/" + record[0] + ".pdf"))
     pdf_list.append(
         {
-            "doi": record["doi"],
+            "doi": record[0],
             "pdf_path": pdf_path,
-            "journal": record["journal"],
-            "date": record["date"],
+            "journal": record[1],
+            "date": record[2],
         }
     )
 
@@ -116,8 +45,8 @@ for record in all_records:
 #         jie_pdf_names.append(pdf_name)
 
 # test = {
-#     "doi": "10.1002/we.2349",
-#     "pdf_path": "docs/journals/10.1002/we.2349.pdf",
+#     "doi": "10.1002/aenm.202400742",
+#     "pdf_path": "docs/journals/10.1002/aenm.202400742.pdf",
 #     "journal": "test",
 #     "date": "2020-02",
 # }
@@ -139,6 +68,6 @@ with concurrent.futures.ProcessPoolExecutor(30) as executor:
     executor.map(safe_sci_chunk, pdf_list)
 
 # end_time = time.time()htop
-    
+
 
 # print(f"Execution time: {end_time - start_time} seconds")

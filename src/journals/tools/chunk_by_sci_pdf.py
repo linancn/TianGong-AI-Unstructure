@@ -4,8 +4,10 @@ import tempfile
 
 import arrow
 from dotenv import load_dotenv
+from datetime import UTC, datetime
 from openai import OpenAI
 from pinecone import Pinecone
+import psycopg2
 from tools.vision import vision_completion
 from unstructured.chunking.title import chunk_by_title
 from unstructured.cleaners.core import clean, group_broken_paragraphs
@@ -19,15 +21,11 @@ from unstructured.documents.elements import (
     Title,
 )
 from unstructured.partition.auto import partition
-from xata.client import XataClient
+
 
 load_dotenv()
 
 client = OpenAI()
-
-xata_api_key = os.getenv("XATA_API_KEY")
-xata_db_url = os.getenv("XATA_DOCS_DB_URL")
-xata = XataClient(api_key=xata_api_key, db_url=xata_db_url)
 
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
@@ -136,7 +134,7 @@ def sci_chunk(pdf_list, vision=False):
         header_footer=False,
         pdf_extract_images=vision,
         pdf_image_output_dir_path=tempfile.gettempdir(),
-        pdf_infer_table_structure=True,
+        # pdf_infer_table_structure=True,
         skip_infer_table_types=["jpg", "png", "xls", "xlsx", "heic"],
         strategy="hi_res",
         hi_res_model_name="yolox",
@@ -231,8 +229,25 @@ def sci_chunk(pdf_list, vision=False):
 
     idx.upsert(vectors=vectors, batch_size=100, namespace="sci", show_progress=False)
 
-    xata.sql().query(
-        'UPDATE "journals" SET "embedding_time" = NOW() WHERE doi = $1', [doi]
+    conn_pg = psycopg2.connect(
+        database=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+        host=os.getenv("POSTGRES_HOST"),
+        port=os.getenv("POSTGRES_PORT"),
     )
+
+    try:
+        with conn_pg.cursor() as cur:
+            cur.execute(
+                "UPDATE journals SET embedding_time = %s WHERE doi = %s",
+                (datetime.now(UTC), doi),
+            )
+            conn_pg.commit()
+    except Exception as e:
+        conn_pg.rollback()
+        print(f"An error occurred: {e}")
+    finally:
+        conn_pg.close()
 
     print(f"Finished {pdf_path}")
