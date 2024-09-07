@@ -73,5 +73,5 @@ def safe_process_pdf(record):
 #     process_pdf(record)
 
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
     executor.map(safe_process_pdf, records)

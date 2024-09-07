@@ -27,7 +27,7 @@ def unstructure_pdf(pdf_name, extract_images=False):
         skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
         strategy="hi_res",
         hi_res_model_name="yolox",
-        languages=["chi_sim", "eng"],
+        languages=["chi_sim"],
     )
 
     filtered_elements = [

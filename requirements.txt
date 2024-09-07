@@ -1,8 +1,11 @@
+# unstructured[all-docs] == 0.13.3
 arrow
 boto3
+nltk
 openai
 opensearch-py
 oss2
+paddlepaddle-gpu
 pinecone-client
 psycopg2-binary
 Pyarrow
@@ -11,7 +14,6 @@ python-dotenv
 requests-aws4auth
 tenacity
 tiktoken
-# unstructured[all-docs] == 0.13.3
+unstructured.PaddleOCR
 unstructured[all-docs]
 weaviate-client
-xata

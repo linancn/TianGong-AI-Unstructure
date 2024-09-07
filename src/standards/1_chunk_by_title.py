@@ -1,80 +1,57 @@
 import concurrent.futures
 import os
 import pickle
+import psycopg2
 
 from dotenv import load_dotenv
 from tools.unstructure_pdf import unstructure_pdf
-from xata.client import XataClient
 
 load_dotenv()
 
-xata = XataClient(
-    api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_DOCS_DB_URL")
-)
+user = os.getenv("POSTGRES_USER")
+password = os.getenv("POSTGRES_PASSWORD")
+host = os.getenv("POSTGRES_HOST")
+port = os.getenv("POSTGRES_PORT")
+dbname = os.getenv("POSTGRES_DB")
 
-table_name = "standards"
-columns = ["id"]
-filter = {"$notExists": "embedding_time"}
-
-
-def fetch_all_records(xata, table_name, columns, filter, page_size=1000):
-    all_records = []
-    cursor = None
-    more = True
-
-    while more:
-        page = {"size": page_size}
-        if not cursor:
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                    "filter": filter,
-                },
-            )
-        else:
-            page["after"] = cursor
-            results = xata.data().query(
-                table_name,
-                {
-                    "page": page,
-                    "columns": columns,
-                },
-            )
-
-        all_records.extend(results["records"])
-        cursor = results["meta"]["page"]["cursor"]
-        more = results["meta"]["page"]["more"]
-
-    return all_records
-
-
-records = fetch_all_records(xata, table_name, columns, filter)
+with psycopg2.connect(
+    f"user={user} password={password} host={host} port={port} dbname={dbname}"
+) as conn:
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM standards")
+        rows = cur.fetchall()
 
 
 def process_pdf(record):
-    record_id = record["id"]
+    text_list = unstructure_pdf("temp/" + record + ".pdf")
 
-    text_list = unstructure_pdf("docs/standards/" + record_id + ".pdf")
-
-    with open("standards_pickle/" + record_id + ".pkl", "wb") as f:
+    with open("temp/" + record + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(text_list)
 
-    with open("standards_txt/" + record_id + ".txt", "w") as f:
+    with open("temp/" + record + ".txt", "w") as f:
         f.write(text_str)
+
+# 从数据库获取的id
+db_ids = {row[0] for row in rows}
+
+docs_path = "standards_pickle"
+# 列出docs/standards目录下的所有文件
+files = os.listdir(docs_path)
+file_ids = {os.path.splitext(file_name)[0] for file_name in files}
+# 找出数据库中有但文件系统中没有的id
+missing_file_ids = db_ids - file_ids
 
 
 # record = {"id": "rec_clu17n8bslsq4fnfc8s0"}
 
-# record = {"id": "rec_cltid4e9hf9adk7qf2rg"}
+# record = {"id": "2a7ffbb3-c09d-4010-8edb-b4cc7ff48dbc"}
 
-# process_pdf(record)
+process_pdf("1088d100-0697-4537-896b-bdb4066bfc1b")
 
-# for record in records:
+# for record in missing_file_ids:
 #     process_pdf(record)
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=30) as executor:
-    executor.map(process_pdf, records)
+# with concurrent.futures.ProcessPoolExecutor(max_workers=30) as executor:
+#     executor.map(process_pdf, missing_file_ids)
