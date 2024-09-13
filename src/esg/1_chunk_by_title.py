@@ -78,11 +78,8 @@ records = [record for record in records if record[0] not in id]
 
 
 def process_pdf(record):
-    record_id = record[0]
-    if record[1] == "eng":
-        language = ["eng"]
-    else:
-        language = [record[1], "eng"]
+    record_id = record["id"]
+    language = [record["language"]]
 
     text_list = unstructure_pdf(
         pdf_name="docs/esg/" + record_id + ".pdf", languages=language

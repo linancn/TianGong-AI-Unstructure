@@ -138,6 +138,8 @@ tesseract --list-langs
 
 ## Run in Background
 ```bash
+watch -n 1 nvidia-smi
+
 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
 pkill -f src/journals/chunk_by_title_sci.py
 

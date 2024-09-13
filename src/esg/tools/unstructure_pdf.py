@@ -11,7 +11,7 @@ from unstructured.documents.elements import (
     Image,
     Table,
 )
-from unstructured.partition.auto import partition
+from unstructured.partition.pdf import partition_pdf
 
 load_dotenv()
 
@@ -20,12 +20,12 @@ def unstructure_pdf(pdf_name, languages=["chi_sim", "eng"], extract_images=False
     min_image_width = 250
     min_image_height = 270
 
-    elements = partition(
+    elements = partition_pdf(
         filename=pdf_name,
         pdf_extract_images=extract_images,
         pdf_image_output_dir_path=tempfile.gettempdir(),
-        skip_infer_table_types=["jpg", "png", "xls", "xlsx"],
         strategy="hi_res",
+        infer_table_structure=True,
         hi_res_model_name="yolox",
         languages=languages,
     )
