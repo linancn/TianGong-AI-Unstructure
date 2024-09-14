@@ -16,7 +16,7 @@ from unstructured.partition.pdf import partition_pdf
 load_dotenv()
 
 
-def unstructure_pdf(pdf_name, languages=["chi_sim", "eng"], extract_images=False):
+def unstructure_pdf(pdf_name, languages=["chi_sim"], extract_images=False):
     min_image_width = 250
     min_image_height = 270
 

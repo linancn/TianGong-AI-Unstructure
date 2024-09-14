@@ -63,7 +63,7 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, language FROM esg_meta WHERE embedded_time IS NULL")
+    cur.execute("SELECT id, language FROM esg_meta WHERE embedded_time IS NULL AND language IS NOT NULL")
     records = cur.fetchall()
 
 
@@ -78,8 +78,8 @@ records = [record for record in records if record[0] not in id]
 
 
 def process_pdf(record):
-    record_id = record["id"]
-    language = [record["language"]]
+    record_id = record[0]
+    language = [record[1]]
 
     text_list = unstructure_pdf(
         pdf_name="docs/esg/" + record_id + ".pdf", languages=language
@@ -106,13 +106,13 @@ def safe_process_pdf(record):
         return None
 
 
-# record = {"id": "af183ae1-c64b-417a-a19d-bf4d9611ce90", "language": "chi_sim"}
+record = {"id": "af183ae1-c64b-417a-a19d-bf4d9611ce90", "language": "chi_sim"}
 
-# safe_process_pdf(record)
+safe_process_pdf(record)
 
 # for record in records:
 #     process_pdf(record)
 
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-    executor.map(safe_process_pdf, records)
+# with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+#     executor.map(safe_process_pdf, records)

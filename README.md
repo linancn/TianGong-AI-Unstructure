@@ -139,12 +139,25 @@ tesseract --list-langs
 ## Run in Background
 ```bash
 watch -n 1 nvidia-smi
+find esg_txt/ -type f | wc -l 
+ls -lt esg_txt/ | head -n 10
 
 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
 pkill -f src/journals/chunk_by_title_sci.py
 
 CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title.py > esg_unstructured.log 2>&1 &
 CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/esg/3_chunk_by_title_pages.py > esg_meta_unstructured.log 2>&1 &
+
+CUDA_VISIBLE_DEVICES=0 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_0.py > esg_unstructured_0.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_1.py > esg_unstructured_1.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_2.py > esg_unstructured_2.log 2>&1 &
+CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_3.py > esg_unstructured_3.log 2>&1 &
+
+pkill -f src/esg/1_chunk_by_title_0.py
+pkill -f src/esg/1_chunk_by_title_1.py
+pkill -f src/esg/1_chunk_by_title_2.py
+
+
 
 nohup .venv/bin/python3.11 src/esg/2_embedding_init.py > esg_embedding_log.txt 2>&1 &
 
