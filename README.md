@@ -139,8 +139,8 @@ tesseract --list-langs
 ## Run in Background
 ```bash
 watch -n 1 nvidia-smi
-find esg_txt/ -type f | wc -l
-ls -lt esg_txt/ | head -n 10
+find processed_docs/esg_txt/ -type f | wc -l
+ls -lt processed_docs/esg_txt/ | head -n 10
 
 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
 pkill -f src/journals/chunk_by_title_sci.py

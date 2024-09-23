@@ -19,7 +19,7 @@ with conn_pg.cursor() as cur:
     records = cur.fetchall()
 
 
-files = os.listdir("esg_pickle")
+files = os.listdir("processed_docs/esg_pickle")
 
 id = [file[:-4] for file in files]
 

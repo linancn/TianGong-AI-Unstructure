@@ -85,7 +85,7 @@ def process_pdf(record):
         pdf_name="docs/esg/" + record_id + ".pdf", languages=language
     )
 
-    with open("esg_pickle/" + record_id + ".pkl", "wb") as f:
+    with open("processed_docs/esg_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str_list = [
@@ -94,7 +94,7 @@ def process_pdf(record):
 
     text_str = "\n----------\n".join(text_str_list)
 
-    with open("esg_txt/" + record_id + ".txt", "w") as f:
+    with open("processed_docs/esg_txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
 
 
