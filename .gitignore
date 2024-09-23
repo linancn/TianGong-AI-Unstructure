@@ -176,3 +176,5 @@ esg_temp
 esg_meta_pickle/
 esg_meta_txt/
 *.pkl
+nohup.out
+processed_docs/

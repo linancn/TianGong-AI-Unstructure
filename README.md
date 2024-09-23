@@ -139,7 +139,7 @@ tesseract --list-langs
 ## Run in Background
 ```bash
 watch -n 1 nvidia-smi
-find esg_txt/ -type f | wc -l 
+find esg_txt/ -type f | wc -l
 ls -lt esg_txt/ | head -n 10
 
 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
@@ -156,6 +156,7 @@ CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_3.py 
 pkill -f src/esg/1_chunk_by_title_0.py
 pkill -f src/esg/1_chunk_by_title_1.py
 pkill -f src/esg/1_chunk_by_title_2.py
+pkill -f src/esg/1_chunk_by_title_3.py
 
 
 
