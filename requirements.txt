@@ -3,6 +3,7 @@ arrow
 boto3
 nltk
 openai
+opensearch-dsl
 opensearch-py
 oss2
 paddlepaddle-gpu
