@@ -28,6 +28,7 @@ esg_mapping = {
     "mappings": {
         "properties": {
             "rec_id": {"type": "keyword"},
+            "page_number": {"type": "keyword"},
             "text": {
                 "type": "text",
                 "analyzer": "ik_max_word",
@@ -66,17 +67,15 @@ def num_tokens_from_string(string: str) -> int:
 def fix_utf8(original_list):
     cleaned_list = []
     for original_str in original_list:
-        cleaned_str = original_str.replace("\ufffd", " ")
-        cleaned_list.append(cleaned_str)
+        cleaned_str = original_str[0].replace("\ufffd", " ")
+        cleaned_list.append([cleaned_str, original_str[1]])
     return cleaned_list
 
 
 def load_pickle_list(file_path):
     with open(file_path, "rb") as f:
         data = pickle.load(f)
-    clean_data = [item[0] for item in data if isinstance(item, tuple)]
-    
-    return clean_data
+    return data
 
 
 def split_dataframe_table(html_table, chunk_size=8100):
@@ -113,30 +112,30 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        if num_tokens_from_string(d) > 8100:
-            soup = BeautifulSoup(d, "html.parser")
+        if num_tokens_from_string(d[0]) > 8100:
+            soup = BeautifulSoup(d[0], "html.parser")
             tables = soup.find_all("table")
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
                     if table_content:  # check if table_content is not empty
-                        result.append(table_content)
+                        result.append([table_content, d[1]])
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append(str(soup))
+                                result.append([str(soup), d[1]])
                     except Exception as e:
                         logging.error(f"Error splitting dataframe table: {e}")
-        elif num_tokens_from_string(d) < 15:
-            temp += d + " "
+        elif num_tokens_from_string(d[0]) < 15:
+            temp += d[0] + " "
         else:
-            result.append((temp + d))
+            result.append([(temp + d[0]), d[1]])
             temp = ""
     if temp:
-        result.append(temp)
+        result.append(temp, d[1])
 
     return result
 
@@ -151,7 +150,7 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date, category_new FROM esg_meta WHERE id = 'd121475d-4569-4c5b-abf9-3e902556b3f5' "
+        "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date, category_new FROM esg_meta WHERE id = '1ebe00d2-35e8-450c-8077-48422075b3fb' "
     )
     records = cur.fetchall()
 
@@ -192,8 +191,9 @@ for file in files:
         )
         fulltext_list.append(
             {
-                "text": data[index],
+                "text": data[index][0],
                 "rec_id": file_id,
+                "page_number": data[index][1],
                 "title": title,
                 "country": country,
                 "company_name": company,
@@ -214,6 +214,7 @@ def chunk_list(data, chunk_size):
     """Yield successive chunk_size chunks from data."""
     for i in range(0, len(data), chunk_size):
         yield data[i : i + chunk_size]
+
 
 chunk_size = 100
 
