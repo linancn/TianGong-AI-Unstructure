@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pickle
+from datetime import UTC, datetime
 from io import StringIO
 
 import pandas as pd
@@ -23,34 +24,23 @@ client = OpenSearch(
     ssl_show_warn=False,
 )
 
-standard_mapping = {
+edu_mapping = {
     "mappings": {
         "properties": {
-            "rec_id": {"type": "keyword"},
             "text": {
                 "type": "text",
                 "analyzer": "ik_max_word",
                 "search_analyzer": "ik_smart",
             },
-            "title": {
-                "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
-            },
-            "organization": {
-                "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
-            },
-            "effective_date": {"type": "date", "format": "yyyyMMdd'T'HHmmssZ"},
-            "standard_number": {"type": "keyword"},
+            "course": {"type": "keyword"},
+            "rec_id": {"type": "keyword"},
         },
     },
 }
 
-if not client.indices.exists(index="standard"):
-    print("Creating 'standard' index...")
-    client.indices.create(index="standard", body=standard_mapping)
+if not client.indices.exists(index="edu"):
+    print("Creating 'edu' index...")
+    client.indices.create(index="edu", body=edu_mapping)
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -144,20 +134,17 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute(
-        "SELECT id, title, standard_number, issuing_organization, effective_date FROM standards WHERE uploaded_time IS NOT NULL AND expiration_date IS NULL"
-    )
+    cur.execute("SELECT id, course, file_type, language FROM edu_meta")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
-titles = {record[0]: record[1] for record in records}
-standard_numbers = {record[0]: record[2] for record in records}
-organizations = {record[0]: record[3] for record in records}
-effective_dates = {record[0]: record[4] for record in records}
+courses = {record[0]: record[1] for record in records}
+file_types = {record[0]: record[2] for record in records}
+languages = {record[0]: record[3] for record in records}
 
-files = [str(id) + ".pkl" for id in ids]
+files = [str(id) + file_types[id] + ".pkl" for id in ids]
 
-dir = "processed_docs/standards_pickle"
+dir = "processed_docs/education_pickle"
 
 for file in files:
     file_path = os.path.join(dir, file)
@@ -166,27 +153,23 @@ for file in files:
     data = fix_utf8(data)
 
     file_id = file.split(".")[0]
-    title = titles[file_id]
-    standard_number = standard_numbers[file_id]
-    organization = "，".join(organizations[file_id])
-    effective_date = effective_dates[file_id].strftime("%Y%m%dT%H%M%S%z")
+    course = courses[file_id]
+    language = languages[file_id]
 
     fulltext_list = []
     for index, d in enumerate(data):
         fulltext_list.append(
-            {"index": {"_index": "standard", "_id": file_id + "_" + str(index)}}
+            {"index": {"_index": "edu", "_id": file_id + "_" + str(index)}}
         )
-        fulltext_list.append(
-            {
-                "text": data[index],
-                "rec_id": file_id,
-                "title": title,
-                "standard_number": standard_number,
-                "organization": organization,
-                "effective_date": effective_date,
-            }
-        )
+        fulltext_list.append({"text": data[index], "rec_id": file_id, "course": course})
     n = len(fulltext_list)
     for i in range(0, n, 500):
         batch = fulltext_list[i : i + 500]
         client.bulk(body=batch)
+
+    with conn_pg.cursor() as cur:
+        cur.execute(
+            "UPDATE edu_meta SET fulltext_time = %s WHERE id = %s",
+            (datetime.now(UTC), file_id),
+        )
+        conn_pg.commit()
