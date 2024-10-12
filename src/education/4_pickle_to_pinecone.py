@@ -17,6 +17,14 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 
 load_dotenv()
 
+logging.basicConfig(
+    filename="edu_pickle_to_pinecone.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+    filemode="w",
+    force=True,
+)
+
 client = OpenAI()
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
@@ -52,7 +60,7 @@ def get_embeddings(items, model="text-embedding-3-small"):
         return results
 
     except Exception as e:
-        print(e)
+        logging.error(e)
 
 
 def load_pickle_list(file_path):
@@ -178,7 +186,7 @@ for file in files:
                 "id": file_id + "_" + str(index),
                 "values": e.embedding,
                 "metadata": {
-                    "text": data[index][0],
+                    "text": data[index],
                     "rec_id": file_id,
                     "course": course,
                     "language": language,
@@ -207,6 +215,6 @@ with conn_pg.cursor() as cur:
             chunk,
         )
         conn_pg.commit()
-        print(f"Updated chunk {i}/{total_chunks}, {len(chunk)} records in this chunk.")
+        logging.info(f"Updated chunk {i}/{total_chunks}, {len(chunk)} records in this chunk.")
 
 conn_pg.close()

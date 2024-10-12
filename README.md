@@ -166,4 +166,14 @@ nohup .venv/bin/python3.11 src/standards/1_chunk_by_title.py > log.txt 2>&1 &
 
 nohup .venv/bin/python3.11 src/reports/1_chunk_by_title.py > log.txt 2>&1 &
 nohup .venv/bin/python3.11 src/reports/2_embedding_init.py > log.txt 2>&1 &
+
+nohup .venv/bin/python3.11 src/education/4_pickle_to_pinecone.py > log.txt 2>&1 &
+
+##standards
+nohup .venv/bin/python3.11 src/standards/3_pickle_to_pinecone.py &
+
+##reports
+nohup .venv/bin/python3.11 src/reports/3_pickle_to_pinecone.py &
+nohup .venv/bin/python3.11 src/reports/3_pickle_to_opensearch.py &
+pkill -f src/reports/3_pickle_to_opensearch.py
 ```
