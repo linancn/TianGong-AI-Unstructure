@@ -225,8 +225,8 @@ for file in files:
                 }
             )
         n = len(fulltext_list)
-        for i in range(0, n, 500):
-            batch = fulltext_list[i : i + 500]
+        for i in range(0, n, 1000):
+            batch = fulltext_list[i : i + 1000]
             client.bulk(body=batch)
 
         # Get a connection from the pool
