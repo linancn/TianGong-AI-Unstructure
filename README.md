@@ -176,4 +176,12 @@ nohup .venv/bin/python3.11 src/standards/3_pickle_to_pinecone.py &
 nohup .venv/bin/python3.11 src/reports/3_pickle_to_pinecone.py &
 nohup .venv/bin/python3.11 src/reports/3_pickle_to_opensearch.py &
 pkill -f src/reports/3_pickle_to_opensearch.py
+
+
+##esg
+nohup .venv/bin/python3.11 src/esg/3_pickle_to_opensearch.py > esg_opensearch_log.txt 2>&1 &
+nohup .venv/bin/python3.11 src/esg/3_pickle_to_pinecone.py > esg_pinecone_log.txt 2>&1 &
+
+pkill -f src/esg/3_pickle_to_pinecone.py
+pkill -f src/esg/3_pickle_to_opensearch.py
 ```

@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import pickle
@@ -6,13 +5,32 @@ from datetime import UTC, datetime
 from io import StringIO
 
 import pandas as pd
-import psycopg2
+from psycopg2 import pool
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from opensearchpy import OpenSearch
 
+# from supabase import create_client, Client
+
 load_dotenv()
+
+logging.basicConfig(
+    filename="esg_opensearch.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+    filemode="w",
+    force=True,
+)
+
+# supabase_url= os.environ.get("LOCAL_SUPABASE_URL")
+# supabase_anon_key = os.environ.get("LOCAL_SUPABASE_ANON_KEY")
+# email = os.environ.get("EMAIL")
+# password = os.environ.get("PASSWORD")
+# supabase: Client = create_client(supabase_url, supabase_anon_key)
+# user = supabase.auth.sign_in_with_password({ "email": email, "password": password })
+
+# data = supabase.table("esg_meta").update({"category": "999"}).eq("id", '91c91b60-a6c9-4100-856e-97da70f3a4d0').execute()
 
 client = OpenSearch(
     hosts=[{"host": os.getenv("OPENSEARCH_HOST"), "port": 9200}],
@@ -135,12 +153,13 @@ def merge_pickle_list(data):
             result.append([(temp + d[0]), d[1]])
             temp = ""
     if temp:
-        result.append(temp, d[1])
+        result.append([temp, d[1]])
 
     return result
 
 
-conn_pg = psycopg2.connect(
+conn_pool = pool.SimpleConnectionPool(
+    1, 20,  # min and max number of connections
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),
@@ -148,83 +167,102 @@ conn_pg = psycopg2.connect(
     port=os.getenv("POSTGRES_PORT"),
 )
 
-with conn_pg.cursor() as cur:
-    cur.execute(
-        "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date, category_new FROM esg_meta WHERE id = '1ebe00d2-35e8-450c-8077-48422075b3fb' "
-    )
-    records = cur.fetchall()
+with conn_pool.getconn() as conn_pg:
+    with conn_pg.cursor() as cur:
+        cur.execute(
+            "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date, category_new FROM esg_meta WHERE uploaded_time IS NOT NULL AND country IS NOT NULL AND company_name IS NOT NULL AND report_title IS NOT NULL AND publication_date IS NOT NULL AND report_start_date IS NOT NULL AND report_end_date IS NOT NULL AND fulltext_time IS NULL"
+        )
+        records = cur.fetchall()
 
 ids = [record[0] for record in records]
-country = {record[0]: record[1] for record in records}
-company_name = {record[0]: record[2] for record in records}
-report_title = {record[0]: record[3] for record in records}
-publication_date = {record[0]: record[4] for record in records}
-report_start_date = {record[0]: record[5] for record in records}
-report_end_date = {record[0]: record[6] for record in records}
-category = {record[0]: record[7] for record in records}
+countries = {record[0]: record[1] for record in records}
+company_names = {record[0]: record[2] for record in records}
+report_titles = {record[0]: record[3] for record in records}
+publication_dates = {record[0]: record[4] for record in records}
+report_start_dates = {record[0]: record[5] for record in records}
+report_end_dates = {record[0]: record[6] for record in records}
+categories = {record[0]: record[7] for record in records}
 
 files = [str(id) + ".pkl" for id in ids]
 
-dir = "temp/ali"
+dir = "processed_docs/esg_pickle"
 
-update_data = []
+# update_data = []
 
 for file in files:
     file_path = os.path.join(dir, file)
-    data = load_pickle_list(file_path)
-    data = merge_pickle_list(data)
-    data = fix_utf8(data)
+    try:
+        data = load_pickle_list(file_path)
+        data = merge_pickle_list(data)
+        data = fix_utf8(data)
 
-    file_id = file.split(".")[0]
-    title = report_title[file_id]
-    country = country[file_id]
-    company = company_name[file_id]
-    publication_date = int(publication_date[file_id].timestamp())
-    report_start_date = int(report_start_date[file_id].timestamp())
-    report_end_date = int(report_end_date[file_id].timestamp())
-    category = category[file_id]
+        file_id = file.split(".")[0]
+        title = report_titles[file_id]
+        country = countries[file_id]
+        company = company_names[file_id]
+        publication_date = int(publication_dates[file_id].timestamp())
+        report_start_date = int(report_start_dates[file_id].timestamp())
+        report_end_date = int(report_end_dates[file_id].timestamp())
+        category = categories[file_id]
 
-    fulltext_list = []
-    for index, d in enumerate(data):
-        fulltext_list.append(
-            {"index": {"_index": "esg", "_id": file_id + "_" + str(index)}}
-        )
-        fulltext_list.append(
-            {
-                "text": data[index][0],
-                "rec_id": file_id,
-                "page_number": data[index][1],
-                "title": title,
-                "country": country,
-                "company_name": company,
-                "publication_date": publication_date,
-                "report_start_date": report_start_date,
-                "report_end_date": report_end_date,
-                "category": category,
-            }
-        )
-    n = len(fulltext_list)
-    for i in range(0, n, 500):
-        batch = fulltext_list[i : i + 500]
-        client.bulk(body=batch)
-    update_data.append((datetime.now(UTC), file_id))
+        fulltext_list = []
+        for index, d in enumerate(data):
+            fulltext_list.append(
+                {"index": {"_index": "esg", "_id": file_id + "_" + str(index)}}
+            )
+            fulltext_list.append(
+                {
+                    "text": data[index][0],
+                    "rec_id": file_id,
+                    "page_number": data[index][1],
+                    "title": title,
+                    "country": country,
+                    "company_name": company,
+                    "publication_date": publication_date,
+                    "report_start_date": report_start_date,
+                    "report_end_date": report_end_date,
+                    "category": category,
+                }
+            )
+        n = len(fulltext_list)
+        for i in range(0, n, 500):
+            batch = fulltext_list[i : i + 500]
+            client.bulk(body=batch)
+
+        # Get a connection from the pool
+        conn_pg = conn_pool.getconn()
+        try:
+            with conn_pg.cursor() as cur:
+                cur.execute(
+                    "UPDATE esg_meta SET fulltext_time = %s WHERE id = %s",
+                    (datetime.now(UTC), file_id),
+                )
+                conn_pg.commit()
+                logging.info(f"Updated {file_id} in the database.")
+        finally:
+            # Release the connection back to the pool
+            conn_pool.putconn(conn_pg)
+
+    except Exception :
+        logging.error(f"Error processing pickle file: {file}")
+# Close the connection pool
+conn_pool.closeall()
+
+# def chunk_list(data, chunk_size):
+#     """Yield successive chunk_size chunks from data."""
+#     for i in range(0, len(data), chunk_size):
+#         yield data[i : i + chunk_size]
 
 
-def chunk_list(data, chunk_size):
-    """Yield successive chunk_size chunks from data."""
-    for i in range(0, len(data), chunk_size):
-        yield data[i : i + chunk_size]
+# chunk_size = 100
 
+# with conn_pg.cursor() as cur:
+#     for chunk in chunk_list(update_data, chunk_size):
+#         cur.executemany(
+#             "UPDATE esg_meta SET fulltext_time = %s WHERE id = %s",
+#             chunk,
+#         )
+#         conn_pg.commit()
+#         print(f"Updated {len(update_data)} records in the database.")
 
-chunk_size = 100
-
-with conn_pg.cursor() as cur:
-    for chunk in chunk_list(update_data, chunk_size):
-        cur.executemany(
-            "UPDATE esg_meta SET fulltext_time = %s WHERE id = %s",
-            chunk,
-        )
-        conn_pg.commit()
-        print(f"Updated {len(update_data)} records in the database.")
-
-conn_pg.close()
+# conn_pg.close()
