@@ -1,5 +1,8 @@
 import glob
 import os
+from datetime import datetime
+import psycopg2
+from psycopg2 import sql
 from pptx import Presentation
 from unstructured.partition.pptx import partition_pptx
 import concurrent.futures
@@ -49,19 +52,41 @@ def process_pptx(file_path):
 
     text_list = extract_text(file_path)
 
-    with open("test/pickle/" + record_id + ".pptx" + ".pkl", "wb") as f:
+    with open("processed_docs/ali_pickle/" + record_id + ".pptx" + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
     text_str = "\n----------\n".join(map(str, text_list))
 
-    with open("test/txt/" + record_id + ".pptx" + ".txt", "w") as f:
+    with open("processed_docs/ali_txt/" + record_id + ".pptx" + ".txt", "w") as f:
         f.write(text_str)
 
 
-directory = "test"
-pptx_files = glob.glob(os.path.join(directory, "*.pptx"))
+conn = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
+)
+cur = conn.cursor()
+cur.execute("SELECT id FROM ali WHERE unstructure_time is NULL")
+rows = cur.fetchall()
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
-    executor.map(process_pptx, pptx_files)
+directory = "docs/ali"
+
+for row in rows:
+    docx_file = os.path.join(directory, row[0] + ".pptx")
+    if os.path.exists(docx_file):
+        process_pptx(docx_file)
+        cur.execute(
+            sql.SQL("UPDATE ali SET unstructure_time = %s WHERE id = %s"),
+            [datetime.now(), row[0]],
+        )
+        conn.commit()
+    else:
+        continue
+
+cur.close()
+conn.close()
 
 print("Data inserted successfully")

@@ -1,7 +1,8 @@
-import glob
 import os
 import pickle
-import concurrent.futures
+from datetime import datetime
+import psycopg2
+from psycopg2 import sql
 from unstructured.partition.docx import partition_docx
 from unstructured.chunking.title import chunk_by_title
 from unstructured.documents.elements import CompositeElement, Table
@@ -72,17 +73,42 @@ def process_docx(file_path):
 
     text_str = "\n----------\n".join(map(str, merged_text_list))
 
-    with open("test/pickle/" + record_id + ".docx" + ".pkl", "wb") as f:
+    with open("processed_docs/ali_pickle/" + record_id + ".docx" + ".pkl", "wb") as f:
         pickle.dump(merged_text_list, f)
 
-    with open("test/txt/" + record_id + ".docx" + ".txt", "w") as f:
+    with open("processed_docs/ali_txt/" + record_id + ".docx" + ".txt", "w") as f:
         f.write(text_str)
 
 
-directory = "test"
-docx_files = glob.glob(os.path.join(directory, "*.docx"))
+conn = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
+)
+cur = conn.cursor()
+cur.execute("SELECT id FROM ali WHERE unstructure_time is NULL")
+rows = cur.fetchall()
 
-with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
-    executor.map(process_docx, docx_files)
+directory = "docs/ali"
 
-print("Data inserted successfully")
+for row in rows:
+    docx_file = os.path.join(directory, row[0] + ".docx")
+    if os.path.exists(docx_file):
+        process_docx(docx_file)
+        cur.execute(
+            sql.SQL("UPDATE ali SET unstructure_time = %s WHERE id = %s"),
+            [datetime.now(), row[0]],
+        )
+        conn.commit()
+    else:
+        continue
+
+cur.close()
+conn.close()
+
+# with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
+#     executor.map(process_docx, docx_files)
+
+print("Data unstructured successfully")
