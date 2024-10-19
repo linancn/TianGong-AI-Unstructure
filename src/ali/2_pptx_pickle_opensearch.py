@@ -15,7 +15,7 @@ import tiktoken
 load_dotenv()
 
 logging.basicConfig(
-    filename="ali_docx_fulltext.log",
+    filename="ali_pptx_fulltext.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -149,6 +149,7 @@ def merge_pickle_list(data):
     return result
 
 
+
 conn_pg = psycopg2.connect(
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
@@ -158,13 +159,13 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, title FROM ali WHERE file_type = '.docx'")
+    cur.execute("SELECT id, title FROM ali WHERE file_type = '.pptx'")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
 titles = {record[0]: record[1] for record in records}
 
-files = [str(id) + ".docx.pkl" for id in ids]
+files = [str(id) + ".pptx.pkl" for id in ids]
 
 dir = "processed_docs/ali_pickle"
 

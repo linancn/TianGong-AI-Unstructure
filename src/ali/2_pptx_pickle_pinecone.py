@@ -6,13 +6,13 @@ from io import StringIO
 import uuid
 
 import pandas as pd
+import psycopg2
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
-from xata import XataClient
 
 load_dotenv()
 
@@ -25,17 +25,8 @@ logging.basicConfig(
 )
 
 client = OpenAI()
-
-xata_api_key = os.getenv("XATA_API_KEY")
-xata_db_url = os.getenv("XATA_ALI_DB_URL")
-
-xata = XataClient(
-    api_key=xata_api_key,
-    db_url=xata_db_url,
-)
-
-pc = Pinecone(api_key=os.getenv("PINECONE_SERVERLESS_API_KEY"))
-idx = pc.Index(os.getenv("PINECONE_SERVERLESS_INDEX_NAME"))
+pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
+idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -149,54 +140,114 @@ def upsert_vectors(vectors):
         logging.error(f"Error upserting vectors: {e}")
         raise
 
+conn_pg = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
+)
 
-dir = "test/pickle"
+with conn_pg.cursor() as cur:
+    cur.execute(
+        "SELECT id, title FROM ali WHERE file_type = '.pptx'"
+    )
+    records = cur.fetchall()
 
-files_in_dir = os.listdir(dir)
+ids = [record[0] for record in records]
+titles = {record[0]: record[1] for record in records}
 
-# Filter out files with ".pptx" in their names
-pptx_files_in_dir = [file for file in files_in_dir if ".pptx" in file]
+files = [str(id) + ".pptx.pkl" for id in ids]
 
-# Remove ".pptx.pkl" from the file names for further processing
-files_without_extension = [file.replace(".pptx.pkl", "") for file in pptx_files_in_dir]
+dir = "processed_docs/ali_pickle"
 
-for file_without_extension in files_without_extension:
-
-    file_path = os.path.join(dir, file_without_extension + ".pptx.pkl")
-
+for file in files:
+    file_path = os.path.join(dir, file)
     data = load_pickle_list(file_path)
     data = merge_pickle_list(data)
     data = fix_utf8(data)
     embeddings = get_embeddings(data)
 
-    file_id = file_without_extension
+    file_id = file.split(".")[0]
+    title = titles[file_id]
 
     vectors = []
-    fulltext_list = []
     for index, e in enumerate(embeddings):
         vectors.append(
             {
-                "id": uuid.uuid4().hex,
+                "id": file_id + "_" + str(index),
                 "values": e.embedding,
                 "metadata": {
                     "text": data[index],
-                    "title": file_id,
+                    "rec_id": file_id,
+                    "title": title,
                 },
             }
         )
 
-        fulltext_list.append(
-                {
-                    "text": data[index],
-                    "title": file_id,
-                }
+    upsert_vectors(vectors)
+    with conn_pg.cursor() as cur:
+            cur.execute(
+                "UPDATE ali SET embedded_time = %s WHERE id = %s",
+                (datetime.now(UTC), file_id),
             )
+            conn_pg.commit()
 
-    # upsert_vectors(vectors)
+    # logging.info(f"{file_id} embedding finished")
 
-    n = len(fulltext_list)
-    for i in range(0, n, 500):
-        batch = fulltext_list[i : i + 500]
-        result = xata.records().bulk_insert("fulltext", {"records": batch})
+cur.close()
+conn_pg.close()
 
-    logging.info(f"Embedding finished for file_id: {file_id}")
+
+
+
+# dir = "test/pickle"
+
+# files_in_dir = os.listdir(dir)
+
+# # Filter out files with ".pptx" in their names
+# pptx_files_in_dir = [file for file in files_in_dir if ".pptx" in file]
+
+# # Remove ".pptx.pkl" from the file names for further processing
+# files_without_extension = [file.replace(".pptx.pkl", "") for file in pptx_files_in_dir]
+
+# for file_without_extension in files_without_extension:
+
+#     file_path = os.path.join(dir, file_without_extension + ".pptx.pkl")
+
+#     data = load_pickle_list(file_path)
+#     data = merge_pickle_list(data)
+#     data = fix_utf8(data)
+#     embeddings = get_embeddings(data)
+
+#     file_id = file_without_extension
+
+#     vectors = []
+#     fulltext_list = []
+#     for index, e in enumerate(embeddings):
+#         vectors.append(
+#             {
+#                 "id": uuid.uuid4().hex,
+#                 "values": e.embedding,
+#                 "metadata": {
+#                     "text": data[index],
+#                     "title": file_id,
+#                 },
+#             }
+#         )
+
+#         fulltext_list.append(
+#                 {
+#                     "text": data[index],
+#                     "title": file_id,
+#                 }
+#             )
+
+#     # upsert_vectors(vectors)
+
+#     n = len(fulltext_list)
+#     for i in range(0, n, 500):
+#         batch = fulltext_list[i : i + 500]
+#         result = xata.records().bulk_insert("fulltext", {"records": batch})
+
+#     logging.info(f"Embedding finished for file_id: {file_id}")
