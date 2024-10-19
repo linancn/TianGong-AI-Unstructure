@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import pickle
@@ -8,19 +7,19 @@ from io import StringIO
 import pandas as pd
 import psycopg2
 import tiktoken
-from openai import OpenAI
 from bs4 import BeautifulSoup
-from pinecone import Pinecone
 from dotenv import load_dotenv
+from openai import OpenAI
+from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
-
 
 load_dotenv()
 
 logging.basicConfig(
-    filename="standard_pinecone.log",
+    filename="ali_docx_embedding.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
+    filemode="w",
     force=True,
 )
 
@@ -45,12 +44,11 @@ def fix_utf8(original_list):
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(items, model="text-embedding-3-small"):
-    text_list = [item[0] for item in items]
+    text_list = [item for item in items]
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
         results = []
-
         for i in range(0, length, 1000):
             result = client.embeddings.create(
                 input=text_list[i : i + 1000], model=model
@@ -59,14 +57,13 @@ def get_embeddings(items, model="text-embedding-3-small"):
         return results
 
     except Exception as e:
-        print(e)
+        logging.error(f"Error generating embeddings: {e}")
+        raise
 
 
 def load_pickle_list(file_path):
     with open(file_path, "rb") as f:
         data = pickle.load(f)
-    # clean_data = [item[0] for item in data if isinstance(item, tuple)]
-
     return data
 
 
@@ -110,7 +107,7 @@ def merge_pickle_list(data):
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
-                    if table_content:  # check if table_content is not empty
+                    if table_content:  # 确保表格内容不为空
                         result.append(table_content)
                 else:
                     try:
@@ -136,11 +133,11 @@ def merge_pickle_list(data):
 def upsert_vectors(vectors):
     try:
         idx.upsert(
-            vectors=vectors, batch_size=200, namespace="standard", show_progress=False
+            vectors=vectors, batch_size=200, namespace="ali", show_progress=False
         )
     except Exception as e:
-        logging.error(e)
-
+        logging.error(f"Error upserting vectors: {e}")
+        raise
 
 conn_pg = psycopg2.connect(
     database=os.getenv("POSTGRES_DB"),
@@ -152,63 +149,100 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, title, standard_number, issuing_organization, effective_date FROM standards WHERE embedded_time IS NOT NULL "
+        "SELECT id, title FROM ali WHERE file_type = '.docx'"
     )
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
 titles = {record[0]: record[1] for record in records}
-standard_numbers = {record[0]: record[2] for record in records}
-organizations = {record[0]: record[3] for record in records}
-effective_dates = {record[0]: record[4] for record in records}
 
-files = [str(id) + ".pkl" for id in ids]
+files = [str(id) + ".docx.pkl" for id in ids]
 
-dir = "processed_docs/standards_pickle"
+dir = "processed_docs/ali_pickle"
 
-update_data = []
 
 for file in files:
-    try:
-        file_path = os.path.join(dir, file)
-        data = load_pickle_list(file_path)
-        data = merge_pickle_list(data)
-        data = fix_utf8(data)
-        embeddings = get_embeddings(data)
+    file_path = os.path.join(dir, file)
+    data = load_pickle_list(file_path)
+    data = merge_pickle_list(data)
+    data = fix_utf8(data)
+    embeddings = get_embeddings(data)
 
-        file_id = file.split(".")[0]
-        title = titles[file_id]
-        standard_number = standard_numbers[file_id]
-        organization = "，".join(organizations[file_id])
-        effective_date = int(effective_dates[file_id].timestamp())
+    file_id = file.split(".")[0]
+    title = titles[file_id]
 
-        vectors = []
-        for index, e in enumerate(embeddings):
-            vectors.append(
-                {
-                    "id": file_id + "_" + str(index),
-                    "values": e.embedding,
-                    "metadata": {
-                        "text": data[index],
-                        "rec_id": file_id,
-                        "title": title,
-                        "standard_number": standard_number,
-                        "organization": organization,
-                        "effective_date": effective_date,
-                    },
-                }
+    vectors = []
+    for index, e in enumerate(embeddings):
+        vectors.append(
+            {
+                "id": file_id + "_" + str(index),
+                "values": e.embedding,
+                "metadata": {
+                    "text": data[index],
+                    "rec_id": file_id,
+                    "title": title,
+                },
+            }
+        )
+
+    upsert_vectors(vectors)
+    with conn_pg.cursor() as cur:
+            cur.execute(
+                "UPDATE ali SET embedded_time = %s WHERE id = %s",
+                (datetime.now(UTC), file_id),
             )
+            conn_pg.commit()
 
-        upsert_vectors(vectors)
-        with conn_pg.cursor() as cur:
-                cur.execute(
-                    "UPDATE standards SET embedded_time = %s WHERE id = %s",
-                    (datetime.now(UTC), file_id),
-                )
-                conn_pg.commit()
+    # logging.info(f"{file_id} embedding finished")
 
-        # logging.info(f"{file_id} embedding finished")
+cur.close()
+conn_pg.close()
 
-    except Exception as e:
-        logging.error(e)
-        continue
+
+# files_in_dir = os.listdir(dir)
+
+# # Filter out files with ".docx" in their names
+# docx_files_in_dir = [file for file in files_in_dir if ".docx" in file]
+
+# # Remove ".docx.pkl" from the file names for further processing
+# files_without_extension = [file.replace(".docx.pkl", "") for file in docx_files_in_dir]
+
+# for file_without_extension in files_without_extension:
+
+#     file_path = os.path.join(dir, file_without_extension + ".docx.pkl")
+
+#     data = load_pickle_list(file_path)
+#     data = merge_pickle_list(data)
+#     data = fix_utf8(data)
+#     embeddings = get_embeddings(data)
+
+#     file_id = file_without_extension
+
+#     vectors = []
+#     fulltext_list = []
+#     for index, e in enumerate(embeddings):
+#         vectors.append(
+#             {
+#                 "id": uuid.uuid4().hex,
+#                 "values": e.embedding,
+#                 "metadata": {
+#                     "text": data[index],
+#                     "title": file_id,
+#                 },
+#             }
+#         )
+#         fulltext_list.append(
+#                 {
+#                     "text": data[index],
+#                     "title": file_id,
+#                 }
+#             )
+
+#     upsert_vectors(vectors)
+
+#     n = len(fulltext_list)
+#     for i in range(0, n, 500):
+#         batch = fulltext_list[i : i + 500]
+#         result = xata.records().bulk_insert("fulltext", {"records": batch})
+
+#     logging.info(f"Embedding finished for file_id: {file_id}")

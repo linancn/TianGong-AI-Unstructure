@@ -6,37 +6,49 @@ from io import StringIO
 import uuid
 
 import pandas as pd
+import psycopg2
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
-from xata import XataClient
+from opensearchpy import OpenSearch
 
 load_dotenv()
 
 logging.basicConfig(
-    filename="ali_docx_embedding.log",
+    filename="ali_docx_fulltext.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
     force=True,
 )
 
-client = OpenAI()
-
-xata_api_key = os.getenv("XATA_API_KEY")
-xata_db_url = os.getenv("XATA_ALI_DB_URL")
-
-xata = XataClient(
-    api_key=xata_api_key,
-    db_url=xata_db_url,
+client = OpenSearch(
+    hosts=[{"host": os.getenv("OPENSEARCH_HOST"), "port": 9200}],
+    http_compress=True,
+    http_auth=(os.getenv("OPENSEARCH_USERNAME"), os.getenv("OPENSEARCH_PASSWORD")),
+    use_ssl=True,
+    verify_certs=False,
+    ssl_assert_hostname=False,
+    ssl_show_warn=False,
 )
-
-
-pc = Pinecone(api_key=os.getenv("PINECONE_SERVERLESS_API_KEY"))
-idx = pc.Index(os.getenv("PINECONE_SERVERLESS_INDEX_NAME"))
+ali_mapping = {
+    "mappings": {
+        "properties": {
+            "text": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            },
+            "rec_id": {"type": "keyword"},
+        },
+    },
+}
+if not client.indices.exists(index="ali"):
+    print("Creating 'ali' index...")
+    client.indices.create(index="ali", body=ali_mapping)
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -151,52 +163,104 @@ def upsert_vectors(vectors):
         raise
 
 
-dir = "test/pickle"
+conn_pg = psycopg2.connect(
+    database=os.getenv("POSTGRES_DB"),
+    user=os.getenv("POSTGRES_USER"),
+    password=os.getenv("POSTGRES_PASSWORD"),
+    host=os.getenv("POSTGRES_HOST"),
+    port=os.getenv("POSTGRES_PORT"),
+)
 
-files_in_dir = os.listdir(dir)
+with conn_pg.cursor() as cur:
+    cur.execute("SELECT id, title FROM ali WHERE file_type = '.docx'")
+    records = cur.fetchall()
 
-# Filter out files with ".docx" in their names
-docx_files_in_dir = [file for file in files_in_dir if ".docx" in file]
+ids = [record[0] for record in records]
+titles = {record[0]: record[1] for record in records}
 
-# Remove ".docx.pkl" from the file names for further processing
-files_without_extension = [file.replace(".docx.pkl", "") for file in docx_files_in_dir]
+files = [str(id) + ".docx.pkl" for id in ids]
 
-for file_without_extension in files_without_extension:
+dir = "processed_docs/ali_pickle"
 
-    file_path = os.path.join(dir, file_without_extension + ".docx.pkl")
 
+for file in files:
+    file_path = os.path.join(dir, file)
     data = load_pickle_list(file_path)
     data = merge_pickle_list(data)
     data = fix_utf8(data)
-    embeddings = get_embeddings(data)
 
-    file_id = file_without_extension
+    file_id = file.split(".")[0]
+    title = titles[file_id]
 
-    vectors = []
     fulltext_list = []
-    for index, e in enumerate(embeddings):
-        vectors.append(
-            {
-                "id": uuid.uuid4().hex,
-                "values": e.embedding,
-                "metadata": {
-                    "text": data[index],
-                    "title": file_id,
-                },
-            }
-        )
+    for index, d in enumerate(data):
         fulltext_list.append(
-                {
-                    "text": data[index],
-                    "title": file_id,
-                }
-            )
-
-    upsert_vectors(vectors)
+            {"index": {"_index": "ali", "_id": file_id + "_" + str(index)}}
+        )
+        fulltext_list.append({"text": data[index], "rec_id": file_id, "title": title})
 
     n = len(fulltext_list)
     for i in range(0, n, 500):
         batch = fulltext_list[i : i + 500]
-        result = xata.records().bulk_insert("fulltext", {"records": batch})
+        client.bulk(body=batch)
 
-    logging.info(f"Embedding finished for file_id: {file_id}")
+    with conn_pg.cursor() as cur:
+        cur.execute(
+            "UPDATE ali SET fulltext_time = %s WHERE id = %s",
+            (datetime.now(UTC), file_id),
+        )
+        conn_pg.commit()
+
+    # logging.info(f"{file_id} embedding finished")
+
+cur.close()
+conn_pg.close()
+
+
+# files_in_dir = os.listdir(dir)
+
+# # Filter out files with ".docx" in their names
+# docx_files_in_dir = [file for file in files_in_dir if ".docx" in file]
+
+# # Remove ".docx.pkl" from the file names for further processing
+# files_without_extension = [file.replace(".docx.pkl", "") for file in docx_files_in_dir]
+
+# for file_without_extension in files_without_extension:
+
+#     file_path = os.path.join(dir, file_without_extension + ".docx.pkl")
+
+#     data = load_pickle_list(file_path)
+#     data = merge_pickle_list(data)
+#     data = fix_utf8(data)
+#     embeddings = get_embeddings(data)
+
+#     file_id = file_without_extension
+
+#     vectors = []
+#     fulltext_list = []
+#     for index, e in enumerate(embeddings):
+#         vectors.append(
+#             {
+#                 "id": uuid.uuid4().hex,
+#                 "values": e.embedding,
+#                 "metadata": {
+#                     "text": data[index],
+#                     "title": file_id,
+#                 },
+#             }
+#         )
+#         fulltext_list.append(
+#                 {
+#                     "text": data[index],
+#                     "title": file_id,
+#                 }
+#             )
+
+#     upsert_vectors(vectors)
+
+#     n = len(fulltext_list)
+#     for i in range(0, n, 500):
+#         batch = fulltext_list[i : i + 500]
+#         result = xata.records().bulk_insert("fulltext", {"records": batch})
+
+#     logging.info(f"Embedding finished for file_id: {file_id}")
