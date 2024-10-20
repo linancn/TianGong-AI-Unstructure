@@ -32,5 +32,3 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-volumes:
-  weaviate_data:

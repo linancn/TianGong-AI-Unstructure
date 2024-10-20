@@ -151,10 +151,17 @@ conn_pool = pool.SimpleConnectionPool(
     port=os.getenv("POSTGRES_PORT"),
 )
 
+# with conn_pool.getconn() as conn_pg:
+#     with conn_pg.cursor() as cur:
+#         cur.execute(
+#             "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date FROM esg_meta WHERE uploaded_time IS NOT NULL AND country IS NOT NULL AND company_name IS NOT NULL AND report_title IS NOT NULL AND publication_date IS NOT NULL AND report_start_date IS NOT NULL AND report_end_date IS NOT NULL AND embedded_time IS NULL"
+#         )
+#         records = cur.fetchall()
+
 with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date FROM esg_meta WHERE uploaded_time IS NOT NULL AND country IS NOT NULL AND company_name IS NOT NULL AND report_title IS NOT NULL AND publication_date IS NOT NULL AND report_start_date IS NOT NULL AND report_end_date IS NOT NULL AND embedded_time IS NULL"
+            "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date FROM esg_meta WHERE fulltext_time is NOT NULL AND embedded_time IS NULL"
         )
         records = cur.fetchall()
 
