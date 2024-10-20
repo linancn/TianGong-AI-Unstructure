@@ -136,7 +136,7 @@ def merge_pickle_list(data):
 def upsert_vectors(vectors):
     try:
         idx.upsert(
-            vectors=vectors, batch_size=200, namespace="ali", show_progress=False
+            vectors=vectors, batch_size=200, namespace="internal_use", show_progress=False
         )
     except Exception as e:
         logging.error(e)
@@ -153,12 +153,13 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, title FROM ali WHERE file_type = '.pdf'"
+        "SELECT id, title, tag FROM internal_use WHERE file_type = '.pdf'"
     )
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
 titles = {record[0]: record[1] for record in records}
+tags = {record[0]: record[2] for record in records}
 
 files = [str(id) + ".pdf.pkl" for id in ids]
 
@@ -175,6 +176,7 @@ for file in files:
 
     file_id = file.split(".")[0]
     title = titles[file_id]
+    tag = tags[file_id]
 
     vectors = []
     for index, e in enumerate(embeddings):
@@ -186,6 +188,7 @@ for file in files:
                     "text": data[index][0],
                     "rec_id": file_id,
                     "title": title,
+                    "tag": tag,
                 },
             }
         )
@@ -194,7 +197,7 @@ for file in files:
     # Get a connection from the pool
     with conn_pg.cursor() as cur:
         cur.execute(
-            "UPDATE ali SET embedded_time = %s WHERE id = %s",
+            "UPDATE internal_use SET embedded_time = %s WHERE id = %s",
             (datetime.now(UTC), file_id),
         )
         conn_pg.commit()

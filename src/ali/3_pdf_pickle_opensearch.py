@@ -43,7 +43,7 @@ client = OpenSearch(
     ssl_show_warn=False,
 )
 
-ali_mapping = {
+internal_use_mapping = {
     "mappings": {
         "properties": {
             "text": {
@@ -52,12 +52,13 @@ ali_mapping = {
                 "search_analyzer": "ik_smart",
             },
             "rec_id": {"type": "keyword"},
+            "tag": {"type": "keyword"},
         },
     },
 }
-if not client.indices.exists(index="ali"):
-    print("Creating 'ali' index...")
-    client.indices.create(index="ali", body=ali_mapping)
+if not client.indices.exists(index="internal_use"):
+    print("Creating 'internal_use' index...")
+    client.indices.create(index="internal_use", body=internal_use_mapping)
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -151,11 +152,12 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, title FROM ali WHERE file_type = '.pdf'")
+    cur.execute("SELECT id, title,tag FROM internal_use WHERE file_type = '.pdf'")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
 titles = {record[0]: record[1] for record in records}
+tags = {record[0]: record[2] for record in records}
 
 files = [str(id) + ".pdf.pkl" for id in ids]
 
@@ -171,18 +173,20 @@ for file in files:
 
     file_id = file.split(".")[0]
     title = titles[file_id]
+    tag = tags[file_id]
 
 
     fulltext_list = []
     for index, d in enumerate(data):
         fulltext_list.append(
-            {"index": {"_index": "ali", "_id": file_id + "_" + str(index)}}
+            {"index": {"_index": "internal_use", "_id": file_id + "_" + str(index)}}
         )
         fulltext_list.append(
             {
                 "text": data[index][0],
                 "rec_id": file_id,
                 "title": title,
+                "tag": tag,
             }
         )
     n = len(fulltext_list)
@@ -192,7 +196,7 @@ for file in files:
 
     with conn_pg.cursor() as cur:
         cur.execute(
-            "UPDATE ali SET fulltext_time = %s WHERE id = %s",
+            "UPDATE internal_use SET fulltext_time = %s WHERE id = %s",
             (datetime.now(UTC), file_id),
         )
         conn_pg.commit()
