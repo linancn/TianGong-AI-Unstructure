@@ -14,6 +14,14 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 
 load_dotenv()
 
+logging.basicConfig(
+    filename="education_opensearch.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+    filemode="w",
+    force=True,
+)
+
 host = os.environ.get("AWS_OPENSEARCH_URL")
 region = "us-east-1"
 
@@ -224,5 +232,7 @@ for key in keys:
             (datetime.now(UTC), file_id),
         )
         conn_pg.commit()
+
+    logging.info(f"Fulltext indexed for {file_id}")
 
 conn_pg.close()
