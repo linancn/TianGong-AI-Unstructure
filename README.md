@@ -184,4 +184,20 @@ nohup .venv/bin/python3.11 src/esg/3_pickle_to_pinecone.py > esg_pinecone_log.tx
 
 pkill -f src/esg/3_pickle_to_pinecone.py
 pkill -f src/esg/3_pickle_to_opensearch.py
+
+
+##journal
+CUDA_VISIBLE_DEVICES=0 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_0.py > journal_pinecone_0.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_1.py > journal_pinecone_1.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_2.py > journal_pinecone_2.log 2>&1 &
+CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_3.py > journal_pinecone_3.log 2>&1 &
+
+pkill -f src/journals/chunk_by_title_sci_0.py
+pkill -f src/journals/chunk_by_title_sci_1.py
+pkill -f src/journals/chunk_by_title_sci_2.py
+pkill -f src/journals/chunk_by_title_sci_3.py
+
+
+find processed_docs/journal_pickle/ -type f | wc -l
+ls -ltR processed_docs/journal_pickle/ | head -n 10
 ```

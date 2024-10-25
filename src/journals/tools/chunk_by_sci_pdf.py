@@ -20,15 +20,15 @@ from unstructured.documents.elements import (
     TableChunk,
     Title,
 )
-from unstructured.partition.auto import partition
+from unstructured.partition.pdf import partition_pdf
 
 
 load_dotenv()
 
 client = OpenAI()
 
-pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
-idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
+pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
+idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
 
 
 def get_doi(pdf_path):
@@ -129,7 +129,7 @@ def sci_chunk(pdf_list, vision=False):
     min_image_height = 270
 
     # 分割文档
-    elements = partition(
+    elements = partition_pdf(
         filename=pdf_path,
         header_footer=False,
         pdf_extract_images=vision,
@@ -202,12 +202,9 @@ def sci_chunk(pdf_list, vision=False):
 
     data = fix_utf8(text_list)
 
-    dir_name, file_name = os.path.split(pdf_path)
-    output_dir = os.path.join("docs_output", dir_name)
-    os.makedirs(output_dir, exist_ok=True)
-
-    with open(os.path.join(output_dir, f"{file_name}.pkl"), "wb") as f:
-        pickle.dump(data, f)
+    pdf_relative_path = pdf_path[len("docs/journals/") :]
+    output_dir = "processed_docs/journal_pickle/"
+    pickle_path = os.path.join(output_dir, f"{pdf_relative_path}.pkl")
 
     embeddings = get_embeddings(data)
 
@@ -226,28 +223,35 @@ def sci_chunk(pdf_list, vision=False):
                 },
             }
         )
+    
+    try:
+        idx.upsert(vectors=vectors, batch_size=100, namespace="sci", show_progress=False)
 
-    idx.upsert(vectors=vectors, batch_size=100, namespace="sci", show_progress=False)
-
-    conn_pg = psycopg2.connect(
+        with open(pickle_path, "wb") as f:
+            pickle.dump(data, f)
+        
+        conn_pg = psycopg2.connect(
         database=os.getenv("POSTGRES_DB"),
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
         host=os.getenv("POSTGRES_HOST"),
         port=os.getenv("POSTGRES_PORT"),
-    )
+        )
+        try:
+            with conn_pg.cursor() as cur:
+                cur.execute(
+                    "UPDATE journals SET embedding_time = %s WHERE doi = %s",
+                    (datetime.now(UTC), doi),
+                )
+                conn_pg.commit()
+                print(f"Updated embedding time: {doi}")
+        except Exception as e:
+            conn_pg.rollback()
+            print(f"PostgreSQL error: {e}")
+        finally:
+            conn_pg.close()
 
-    try:
-        with conn_pg.cursor() as cur:
-            cur.execute(
-                "UPDATE journals SET embedding_time = %s WHERE doi = %s",
-                (datetime.now(UTC), doi),
-            )
-            conn_pg.commit()
     except Exception as e:
-        conn_pg.rollback()
-        print(f"An error occurred: {e}")
-    finally:
-        conn_pg.close()
+        print(f"Upsert error: {e}")
 
     print(f"Finished {pdf_path}")
