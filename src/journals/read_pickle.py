@@ -1,7 +1,9 @@
 import pickle
 
-from tools.chunk_by_sci_pdf import sci_chunk
+# from tools.chunk_by_sci_pdf import sci_chunk
 
+with open("docs_intersection_Oct26.pkl", "rb") as f: 
+    pdf_paths_329367 = pickle.load(f)
 
 with open("journal_pdf_list_0.pkl", "rb") as f:
     pdf_lists0 = pickle.load(f)

@@ -171,16 +171,20 @@ nohup .venv/bin/python3.11 src/education/4_pickle_to_pinecone.py > log.txt 2>&1 
 
 ##standards
 nohup .venv/bin/python3.11 src/standards/3_pickle_to_pinecone.py &
+nohup .venv/bin/python3 src/standards/3_pickle_to_opensearch_aws.py > standard_opensearch_aws_log.txt 2>&1 &
 
 ##reports
 nohup .venv/bin/python3.11 src/reports/3_pickle_to_pinecone.py &
 nohup .venv/bin/python3.11 src/reports/3_pickle_to_opensearch.py &
+nohup .venv/bin/python3 src/reports/3_pickle_to_opensearch_aws.py > report_opensearch_aws_log.txt 2>&1 &
 pkill -f src/reports/3_pickle_to_opensearch.py
+pkill -f src/reports/3_pickle_to_opensearch_aws.py
 
 
 ##esg
 nohup .venv/bin/python3.11 src/esg/3_pickle_to_opensearch.py > esg_opensearch_log.txt 2>&1 &
 nohup .venv/bin/python3.11 src/esg/3_pickle_to_pinecone.py > esg_pinecone_log.txt 2>&1 &
+nohup .venv/bin/python3 src/esg/3_pickle_to_opensearch_aws.py > esg_opensearch_aws_log.txt 2>&1 &
 
 pkill -f src/esg/3_pickle_to_pinecone.py
 pkill -f src/esg/3_pickle_to_opensearch.py
@@ -200,4 +204,6 @@ pkill -f src/journals/chunk_by_title_sci_3.py
 
 find processed_docs/journal_pickle/ -type f | wc -l
 ls -ltR processed_docs/journal_pickle/ | head -n 10
+
+nohup .venv/bin/python3 src/journals/2_pickle_to_pinecone_aws.py > journal_pinecone_aws_Oct26_log.txt 2>&1 &
 ```

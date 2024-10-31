@@ -3,24 +3,26 @@ import os
 import pickle
 from datetime import UTC, datetime
 from io import StringIO
-import time
-from urllib.parse import quote
+from urllib.parse import unquote
+import arrow
 
 import pandas as pd
 from psycopg2 import pool
-import psycopg2
-import tiktoken
 from openai import OpenAI
-from bs4 import BeautifulSoup
 from pinecone import Pinecone
+import tiktoken
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_fixed
+
+import boto3
+from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 
 
 load_dotenv()
 
 logging.basicConfig(
-    filename="journal_pinecone.log",
+    filename="journal_pinecone_aws_Oct26.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -28,8 +30,92 @@ logging.basicConfig(
 )
 
 client = OpenAI()
+
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
+
+host = os.environ.get("AWS_OPENSEARCH_URL")
+region = "us-east-1"
+
+service = "aoss"
+credentials = boto3.Session().get_credentials()
+auth = AWSV4SignerAuth(credentials, region, service)
+
+s3_client = boto3.client("s3")
+
+
+# def list_all_objects(bucket_name, prefix):
+#     paginator = s3_client.get_paginator("list_objects_v2")
+#     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+
+#     docs = []
+#     for page in page_iterator:
+#         if "Contents" in page:
+#             for obj in page["Contents"]:
+#                 key = obj["Key"]
+#                 if key.endswith(".pkl"):
+#                     docs.append(key)
+#     return docs
+
+
+def list_all_objects(bucket_name, prefix):
+    paginator = s3_client.get_paginator("list_objects_v2")
+    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+
+    docs = []
+    for page in page_iterator:
+        if "Contents" in page:
+            for obj in page["Contents"]:
+                key = obj["Key"]
+                if key.endswith(".pkl"):
+                    docs.append(key)
+    return docs
+
+
+def load_pickle_from_s3(bucket_name, s3_key):
+    response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+    body = response["Body"].read()
+    data = pickle.loads(body)
+    return data
+
+
+bucket_name = "tiangong"
+prefix = "processed_docs/journal_pickle/"
+suffix = ".pdf.pkl"
+
+
+def extract_doi_from_path(path):
+    doi = path[len(prefix) :][: -len(suffix)]
+    return doi
+
+
+def convert_pdf_to_pickle_path(pdf_path):
+    filename = pdf_path[len("docs/journals/") :]
+    pickle_path = "processed_docs/journal_pickle/" + filename + ".pkl"
+    return pickle_path
+
+
+docs = list_all_objects(bucket_name, prefix)
+
+with open("existing_pickle_paths_687002.pkl", "rb") as f:
+    pdf_paths_687002 = pickle.load(f)
+
+pickle_paths_687002 = [convert_pdf_to_pickle_path(path) for path in pdf_paths_687002]
+
+docs_intersection_Oct26 = list(set(docs) & set(pickle_paths_687002))
+
+with open(f"docs_intersection_Oct26.pkl", "wb") as f:
+    pickle.dump(docs_intersection_Oct26, f)
+
+
+def to_unix_timestamp(date_str: str) -> int:
+    try:
+        # Parse the date string using arrow
+        date_obj = arrow.get(date_str)
+        return int(date_obj.timestamp())
+    except arrow.parser.ParserError:
+        # If the parsing fails, return the current unix timestamp and log a warning
+        return int(arrow.now().timestamp())
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -41,26 +127,23 @@ def num_tokens_from_string(string: str) -> int:
 def fix_utf8(original_list):
     cleaned_list = []
     for original_str in original_list:
-        cleaned_str = original_str[0].replace("\ufffd", " ")
-        cleaned_list.append([cleaned_str, original_str[1]])
+        cleaned_str = original_str.replace("\ufffd", " ")
+        cleaned_list.append(cleaned_str)
     return cleaned_list
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def get_embeddings(items, model="text-embedding-3-small"):
-    text_list = [item[0] for item in items]
+def get_embeddings(text_list, model="text-embedding-3-small"):
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
         results = []
-
         for i in range(0, length, 1000):
             result = client.embeddings.create(
-                input=text_list[i : i + 1000], model=model
-            ).data
+                    input=text_list[i : i + 1000], model=model
+                ).data
             results += result
         return results
-
     except Exception as e:
         print(e)
 
@@ -107,48 +190,39 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        if num_tokens_from_string(d[0]) > 8100:
-            soup = BeautifulSoup(d[0], "html.parser")
+        if num_tokens_from_string(d) > 8100:
+            soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
                     if table_content:  # check if table_content is not empty
-                        result.append([table_content, d[1]])
+                        result.append(table_content)
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append([str(soup), d[1]])
+                                result.append(str(soup))
                     except Exception as e:
                         logging.error(f"Error splitting dataframe table: {e}")
-        elif num_tokens_from_string(d[0]) < 15:
-            temp += d[0] + " "
+        elif num_tokens_from_string(d) < 15:
+            temp += d + " "
         else:
-            result.append([(temp + d[0]), d[1]])
+            result.append((temp + d))
             temp = ""
     if temp:
-        result.append([temp, d[1]])
+        result.append(temp)
 
     return result
 
-
-@retry(wait=wait_fixed(3), stop=stop_after_attempt(10))
-def upsert_vectors(vectors):
-    try:
-        idx.upsert(
-            vectors=vectors, batch_size=200, namespace="sci", show_progress=False
-        )
-    except Exception as e:
-        logging.error(e)
 
 def get_files_before(directory, target_time):
     old_files = set()
     # 获取指定时间的时间戳
     target_timestamp = target_time
-    
+
     for root, _, files in os.walk(directory):
         for file in files:
             file_path = os.path.join(root, file)
@@ -160,42 +234,10 @@ def get_files_before(directory, target_time):
                 old_files.add(relative_path)
     return old_files
 
-pickle_directory = "processed_docs/journal_pickle"
-target_time = 1729591200 #2024-10-22 18:00:00
-old_pdf_files = get_files_before(pickle_directory, target_time)
-
-
-conn_pg = psycopg2.connect(
-    database=os.getenv("POSTGRES_DB"),
-    user=os.getenv("POSTGRES_USER"),
-    password=os.getenv("POSTGRES_PASSWORD"),
-    host=os.getenv("POSTGRES_HOST"),
-    port=os.getenv("POSTGRES_PORT"),
-)
-
-
-with conn_pg.cursor() as cur:
-    cur.execute(
-        "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL"
-    )
-    results = cur.fetchall()
-
-pdf_list = []
-for record in results:
-    pdf_path = quote(quote(record[0] + ".pdf"))
-    pdf_list.append(
-        {
-            "doi": record[0],
-            "pdf_path": pdf_path,
-            "journal": record[1],
-            "date": record[2],
-        }
-    )
-
-
 
 conn_pool = pool.SimpleConnectionPool(
-    1, 20,  # min and max number of connections
+    1,
+    20,  # min and max number of connections
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),
@@ -214,45 +256,58 @@ dois = [record[0] for record in records]
 journals = {record[0]: record[1] for record in records}
 dates = {record[0]: record[2] for record in records}
 
-keys = [str(doi) + ".pkl" for doi in dois]
+docs_dois = [
+    unquote(unquote(extract_doi_from_path(doc))) for doc in docs_intersection_Oct26
+]
 
-dir = "processed_docs/journal_pickle"
+df = pd.DataFrame({"doi": docs_dois, "path": docs_intersection_Oct26})
 
-# update_data = []
-
-for file in files:
-    file_path = os.path.join(dir, file)
+for index, row in df.iterrows():
     try:
-        data = load_pickle_list(file_path)
+        data = load_pickle_from_s3(bucket_name, row["path"])
         data = merge_pickle_list(data)
         data = fix_utf8(data)
         embeddings = get_embeddings(data)
 
-        file_id = file.split(".")[0]
-        title = report_titles[file_id]
-        country = countries[file_id]
-        company = company_names[file_id]
-        publication_date = int(publication_dates[file_id].timestamp())
-        report_start_date = int(report_start_dates[file_id].timestamp())
-        report_end_date = int(report_end_dates[file_id].timestamp())
+        file_id = row["doi"]
+        journal = journals[file_id]
+        date = to_unix_timestamp(dates[file_id])
 
         vectors = []
         for index, e in enumerate(embeddings):
-
-        # Get a connection from the pool
-        conn_pg = conn_pool.getconn()
+            vectors.append(
+                {
+                    "id": file_id + "_" + str(index),
+                    "values": e.embedding,
+                    "metadata": {
+                        "text": data[index],
+                        "doi": file_id,
+                        "journal": journal,
+                        "date": date,
+                    },
+                }
+            )
         try:
+            idx.upsert(
+                vectors=vectors, batch_size=100, namespace="sci", show_progress=False
+            )
+
+            # Get a connection from the pool
+            conn_pg = conn_pool.getconn()
             with conn_pg.cursor() as cur:
                 cur.execute(
-                    "UPDATE journal SET embedded_time = %s WHERE id = %s",
+                    "UPDATE journals SET embedding_time = %s WHERE doi = %s",
                     (datetime.now(UTC), file_id),
                 )
                 conn_pg.commit()
                 logging.info(f"Updated {file_id} in the database.")
+        except Exception as e:
+            conn_pg.rollback()
+            print(f"Error: {e}")
         finally:
             # Release the connection back to the pool
             conn_pool.putconn(conn_pg)
     except Exception:
-        logging.error(f"Error processing {file}")
+        logging.error(f"Error processing {row['path']}")
 # Close the connection pool
 conn_pool.closeall()
