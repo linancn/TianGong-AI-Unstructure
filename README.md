@@ -205,5 +205,5 @@ pkill -f src/journals/chunk_by_title_sci_3.py
 find processed_docs/journal_pickle/ -type f | wc -l
 ls -ltR processed_docs/journal_pickle/ | head -n 10
 
-nohup .venv/bin/python3 src/journals/2_pickle_to_pinecone_aws.py > journal_pinecone_aws_Oct26_log.txt 2>&1 &
+nohup .venv/bin/python3 src/journals/2_pickle_to_pinecone_aws.py > journal_pinecone_aws_Oct31_log.txt 2>&1 &
 ```

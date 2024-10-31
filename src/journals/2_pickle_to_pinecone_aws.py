@@ -22,7 +22,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 load_dotenv()
 
 logging.basicConfig(
-    filename="journal_pinecone_aws_Oct26.log",
+    filename="journal_pinecone_aws_Oct31.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -95,18 +95,23 @@ def convert_pdf_to_pickle_path(pdf_path):
     return pickle_path
 
 
-docs = list_all_objects(bucket_name, prefix)
+# docs = list_all_objects(bucket_name, prefix)
 
-with open("existing_pickle_paths_687002.pkl", "rb") as f:
-    pdf_paths_687002 = pickle.load(f)
+# with open("existing_pickle_paths_687002.pkl", "rb") as f:
+#     pdf_paths_687002 = pickle.load(f)
 
-pickle_paths_687002 = [convert_pdf_to_pickle_path(path) for path in pdf_paths_687002]
+# pickle_paths_687002 = [convert_pdf_to_pickle_path(path) for path in pdf_paths_687002]
 
-docs_intersection_Oct26 = list(set(docs) & set(pickle_paths_687002))
+# docs_intersection = list(set(docs) & set(pickle_paths_687002))
 
-with open(f"docs_intersection_Oct26.pkl", "wb") as f:
-    pickle.dump(docs_intersection_Oct26, f)
+# with open(f"docs_intersection_Oct31.pkl", "wb") as f:
+#     pickle.dump(docs_intersection, f)
 
+# with open(f"docs_intersection_Oct26.pkl", "rb") as f:
+#     docs_intersection = pickle.load(f)
+
+with open(f"docs_intersection_Oct31.pkl", "rb") as f:
+    docs_intersection = pickle.load(f)
 
 def to_unix_timestamp(date_str: str) -> int:
     try:
@@ -248,7 +253,7 @@ conn_pool = pool.SimpleConnectionPool(
 with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL"
+            """SELECT doi, journal, date FROM journals WHERE embedding_time IS NOT NULL AND embedding_time < '2024-10-20T00:00:00+00:00'""" # 改为embedding_time早于XXX
         )
         records = cur.fetchall()
 
@@ -257,10 +262,12 @@ journals = {record[0]: record[1] for record in records}
 dates = {record[0]: record[2] for record in records}
 
 docs_dois = [
-    unquote(unquote(extract_doi_from_path(doc))) for doc in docs_intersection_Oct26
+    unquote(unquote(extract_doi_from_path(doc))) for doc in docs_intersection
 ]
 
-df = pd.DataFrame({"doi": docs_dois, "path": docs_intersection_Oct26})
+df = pd.DataFrame({"doi": docs_dois, "path": docs_intersection})
+# 进行内连接，只保留dois和df中"doi"都有的元素
+df = df[df['doi'].isin(dois)]
 
 for index, row in df.iterrows():
     try:
