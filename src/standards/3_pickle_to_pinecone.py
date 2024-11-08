@@ -44,8 +44,8 @@ def fix_utf8(original_list):
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def get_embeddings(items, model="text-embedding-3-small"):
-    text_list = [item[0] for item in items]
+def get_embeddings(text_list, model="text-embedding-3-small"):
+    # text_list = [item[0] for item in items]
     try:
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
@@ -207,7 +207,7 @@ for file in files:
                 )
                 conn_pg.commit()
 
-        # logging.info(f"{file_id} embedding finished")
+        logging.info(f"{file_id} embedding finished")
 
     except Exception as e:
         logging.error(e)
