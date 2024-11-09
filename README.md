@@ -7,7 +7,7 @@
 
 [Tutorial](https://code.visualstudio.com/docs/devcontainers/tutorial)
 
-Python 3 -> Additional Options -> 3.11-bullseye -> ZSH Plugins (Last One) -> Trust @devcontainers-contrib -> Keep Defaults
+Python 3 -> Additional Options -> 3.12-bullseye -> ZSH Plugins (Last One) -> Trust @devcontainers-contrib -> Keep Defaults
 
 Setup `venv`:
 
@@ -30,7 +30,7 @@ pip install -r requirements.txt --upgrade
 
 ```bash
 sudo apt update
-sudo apt install python3.11-dev
+sudo apt install python3.12-dev
 sudo apt install -y libmagic-dev
 sudo apt install -y poppler-utils
 sudo apt install -y libreoffice
@@ -142,16 +142,16 @@ watch -n 1 nvidia-smi
 find processed_docs/esg_txt/ -type f | wc -l
 ls -lt processed_docs/esg_txt/ | head -n 10
 
-nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
 pkill -f src/journals/chunk_by_title_sci.py
 
-CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title.py > esg_unstructured.log 2>&1 &
-CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/esg/3_chunk_by_title_pages.py > esg_meta_unstructured.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.12 src/esg/1_chunk_by_title.py > esg_unstructured.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.12 src/esg/3_chunk_by_title_pages.py > esg_meta_unstructured.log 2>&1 &
 
-CUDA_VISIBLE_DEVICES=0 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_0.py > esg_unstructured_0.log 2>&1 &
-CUDA_VISIBLE_DEVICES=1 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_1.py > esg_unstructured_1.log 2>&1 &
-CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_2.py > esg_unstructured_2.log 2>&1 &
-CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.11 src/esg/1_chunk_by_title_3.py > esg_unstructured_3.log 2>&1 &
+CUDA_VISIBLE_DEVICES=0 nohup .venv/bin/python3.12 src/esg/1_chunk_by_title_0.py > esg_unstructured_0.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup .venv/bin/python3.12 src/esg/1_chunk_by_title_1.py > esg_unstructured_1.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.12 src/esg/1_chunk_by_title_2.py > esg_unstructured_2.log 2>&1 &
+CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.12 src/esg/1_chunk_by_title_3.py > esg_unstructured_3.log 2>&1 &
 
 pkill -f src/esg/1_chunk_by_title_0.py
 pkill -f src/esg/1_chunk_by_title_1.py
@@ -160,30 +160,30 @@ pkill -f src/esg/1_chunk_by_title_3.py
 
 
 
-nohup .venv/bin/python3.11 src/esg/2_embedding_init.py > esg_embedding_log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/esg/2_embedding_init.py > esg_embedding_log.txt 2>&1 &
 
-nohup .venv/bin/python3.11 src/standards/1_chunk_by_title.py > log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/standards/1_chunk_by_title.py > log.txt 2>&1 &
 
-nohup .venv/bin/python3.11 src/reports/1_chunk_by_title.py > log.txt 2>&1 &
-nohup .venv/bin/python3.11 src/reports/2_embedding_init.py > log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/reports/1_chunk_by_title.py > log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/reports/2_embedding_init.py > log.txt 2>&1 &
 
-nohup .venv/bin/python3.11 src/education/4_pickle_to_pinecone.py > log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/education/4_pickle_to_pinecone.py > log.txt 2>&1 &
 
 ##standards
-nohup .venv/bin/python3.11 src/standards/3_pickle_to_pinecone.py &
+nohup .venv/bin/python3.12 src/standards/3_pickle_to_pinecone.py &
 nohup .venv/bin/python3 src/standards/3_pickle_to_opensearch_aws.py > standard_opensearch_aws_log.txt 2>&1 &
 
 ##reports
-nohup .venv/bin/python3.11 src/reports/3_pickle_to_pinecone.py &
-nohup .venv/bin/python3.11 src/reports/3_pickle_to_opensearch.py &
+nohup .venv/bin/python3.12 src/reports/3_pickle_to_pinecone.py &
+nohup .venv/bin/python3.12 src/reports/3_pickle_to_opensearch.py &
 nohup .venv/bin/python3 src/reports/3_pickle_to_opensearch_aws.py > report_opensearch_aws_log.txt 2>&1 &
 pkill -f src/reports/3_pickle_to_opensearch.py
 pkill -f src/reports/3_pickle_to_opensearch_aws.py
 
 
 ##esg
-nohup .venv/bin/python3.11 src/esg/3_pickle_to_opensearch.py > esg_opensearch_log.txt 2>&1 &
-nohup .venv/bin/python3.11 src/esg/3_pickle_to_pinecone.py > esg_pinecone_log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/esg/3_pickle_to_opensearch.py > esg_opensearch_log.txt 2>&1 &
+nohup .venv/bin/python3.12 src/esg/3_pickle_to_pinecone.py > esg_pinecone_log.txt 2>&1 &
 nohup .venv/bin/python3 src/esg/3_pickle_to_opensearch_aws.py > esg_opensearch_aws_log.txt 2>&1 &
 
 pkill -f src/esg/3_pickle_to_pinecone.py
@@ -191,10 +191,10 @@ pkill -f src/esg/3_pickle_to_opensearch.py
 
 
 ##journal
-CUDA_VISIBLE_DEVICES=0 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_0.py > journal_pinecone_0.log 2>&1 &
-CUDA_VISIBLE_DEVICES=1 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_1.py > journal_pinecone_1.log 2>&1 &
-CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_2.py > journal_pinecone_2.log 2>&1 &
-CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.11 src/journals/chunk_by_title_sci_3.py > journal_pinecone_3.log 2>&1 &
+CUDA_VISIBLE_DEVICES=0 nohup .venv/bin/python3.12 src/journals/chunk_by_title_sci_0.py > journal_pinecone_0.log 2>&1 &
+CUDA_VISIBLE_DEVICES=1 nohup .venv/bin/python3.12 src/journals/chunk_by_title_sci_1.py > journal_pinecone_1.log 2>&1 &
+CUDA_VISIBLE_DEVICES=2 nohup .venv/bin/python3.12 src/journals/chunk_by_title_sci_2.py > journal_pinecone_2.log 2>&1 &
+CUDA_VISIBLE_DEVICES=3 nohup .venv/bin/python3.12 src/journals/chunk_by_title_sci_3.py > journal_pinecone_3.log 2>&1 &
 
 pkill -f src/journals/chunk_by_title_sci_0.py
 pkill -f src/journals/chunk_by_title_sci_1.py
