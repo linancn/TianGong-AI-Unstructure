@@ -1,5 +1,4 @@
 import pickle
-import concurrent.futures
 
 from tools.chunk_by_sci_pdf import sci_chunk
 

@@ -12,7 +12,7 @@ Python 3 -> Additional Options -> 3.11-bullseye -> ZSH Plugins (Last One) -> Tru
 Setup `venv`:
 
 ```bash
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 ```
 
