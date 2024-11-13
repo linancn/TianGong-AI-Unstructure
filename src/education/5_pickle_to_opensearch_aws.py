@@ -186,7 +186,7 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, course, file_type, name, chapter_number FROM edu_meta")
+    cur.execute("SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL and fulltext_time IS NULL")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
