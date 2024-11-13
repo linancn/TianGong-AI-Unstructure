@@ -2,7 +2,6 @@ import logging
 import os
 import pickle
 
-import arrow
 import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -18,36 +17,39 @@ logging.basicConfig(
     force=True,
 )
 
-with open("patents_data/20240208/patents_pinocone.pkl", "rb") as f:
+with open("docs/patents/patent_241113.pkl", "rb") as f:
     df = pickle.load(f)
 
+# df = df.head(10000)
+df = df.map(lambda x: None if x == "" else x).dropna()
+df = df.reset_index(drop=True)
 
 # print(df.head())
 
 client = OpenAI()
-pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
-idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
+pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
+idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
 
 
-def to_unix_timestamp(date_str: str) -> int:
-    """
-    Convert a date string to a unix timestamp (seconds since epoch).
+# def to_unix_timestamp(date_str: str) -> int:
+#     """
+#     Convert a date string to a unix timestamp (seconds since epoch).
 
-    Args:
-        date_str: The date string to convert.
+#     Args:
+#         date_str: The date string to convert.
 
-    Returns:
-        The unix timestamp corresponding to the date string.
+#     Returns:
+#         The unix timestamp corresponding to the date string.
 
-    If the date string cannot be parsed as a valid date format, returns the current unix timestamp and prints a warning.
-    """
-    try:
-        # Parse the date string using arrow
-        date_obj = arrow.get(date_str)
-        return int(date_obj.timestamp())
-    except arrow.parser.ParserError:
-        # If the parsing fails, return the current unix timestamp and log a warning
-        return int(arrow.now().timestamp())
+#     If the date string cannot be parsed as a valid date format, returns the current unix timestamp and prints a warning.
+#     """
+#     try:
+#         # Parse the date string using arrow
+#         date_obj = arrow.get(date_str)
+#         return int(date_obj.timestamp())
+#     except arrow.parser.ParserError:
+#         # If the parsing fails, return the current unix timestamp and log a warning
+#         return int(arrow.now().timestamp())
 
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -100,17 +102,17 @@ for i in range(0, len(df), 1000):
         df.at[i + j, "values"] = embeddings[j].embedding
 
     vectors = []
-    for j in range(i, i + 1000):
+    for j in range(len(embeddings)):
         vectors.append(
             {
-                "id": df.at[j, "publication_number"],
-                "values": df.at[j, "values"],
+                "id": df.at[i + j, "publication_number"],
+                "values": df.at[i + j, "values"],
                 "metadata": {
-                    "title": df.at[j, "title"],
-                    "abstract": df.at[j, "abstract"],
-                    "url": df.at[j, "url"],
-                    "country": df.at[j, "country"],
-                    "publication_date": df.at[j, "publication_date"],
+                    "title": df.at[i + j, "title"],
+                    "abstract": df.at[i + j, "abstract"],
+                    "url": df.at[i + j, "url"],
+                    "country": df.at[i + j, "country"],
+                    "publication_date": int(df.at[i + j, "publication_date"]),
                 },
             }
         )
