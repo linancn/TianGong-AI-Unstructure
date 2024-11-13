@@ -93,7 +93,7 @@ def upsert_vectors(vectors):
         logging.error(e)
 
 
-for i in range(4069000, len(df), 1000):
+for i in range(0, len(df), 1000):
     logging.info(i)
     embeddings = get_embeddings(df["abstract"][i : i + 1000])
     for j in range(len(embeddings)):
@@ -110,7 +110,7 @@ for i in range(4069000, len(df), 1000):
                     "abstract": df.at[j, "abstract"],
                     "url": df.at[j, "url"],
                     "country": df.at[j, "country"],
-                    "publication_date": to_unix_timestamp(df.at[j, "publication_date"]),
+                    "publication_date": df.at[j, "publication_date"],
                 },
             }
         )
