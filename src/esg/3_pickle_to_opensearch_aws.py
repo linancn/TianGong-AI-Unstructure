@@ -229,7 +229,7 @@ for key in keys:
         )
         fulltext_list.append(
             {
-                "text": data[index],
+                "text": data[index][0],
                 "rec_id": file_id,
                 "page_number": data[index][1],
                 "title": title,
@@ -246,12 +246,12 @@ for key in keys:
         batch = fulltext_list[i : i + 500]
         client.bulk(body=batch)
 
-    with conn_pg.cursor() as cur:
-        cur.execute(
-            "UPDATE esg_meta SET fulltext_time = %s WHERE id = %s",
-            (datetime.now(UTC), file_id),
-        )
-        conn_pg.commit()
+    # with conn_pg.cursor() as cur:
+    #     cur.execute(
+    #         "UPDATE esg_meta SET fulltext_time = %s WHERE id = %s",
+    #         (datetime.now(UTC), file_id),
+    #     )
+    #     conn_pg.commit()
 
     logging.info(f"Fulltext indexed for {file_id}")
 

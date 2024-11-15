@@ -1,4 +1,5 @@
 import logging
+import numpy
 import os
 import pickle
 
@@ -7,6 +8,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
 from tenacity import retry, stop_after_attempt, wait_fixed
+
+import boto3
+from opensearchpy import AWSV4SignerAuth
 
 load_dotenv()
 
@@ -17,8 +21,25 @@ logging.basicConfig(
     force=True,
 )
 
-with open("docs/patents/patent_241113.pkl", "rb") as f:
-    df = pickle.load(f)
+region = "us-east-1"
+service = "aoss"
+credentials = boto3.Session().get_credentials()
+auth = AWSV4SignerAuth(credentials, region, service)
+
+s3_client = boto3.client("s3")
+
+def load_pickle_from_s3(bucket_name, s3_key):
+    response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+    body = response["Body"].read()
+    data = pickle.loads(body)
+    return data
+
+bucket_name = "tiangong"
+
+# with open("docs/patents/patent_241113.pkl", "rb") as f:
+#     df = pickle.load(f)
+
+df = load_pickle_from_s3(bucket_name, "patents/patent_241113.pkl")
 
 # df = df.head(10000)
 df = df.map(lambda x: None if x == "" else x).dropna()
