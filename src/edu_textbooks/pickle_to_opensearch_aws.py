@@ -3,7 +3,7 @@ import os
 import pickle
 from datetime import UTC, datetime
 from io import StringIO
-from urllib.parse import unquote
+import arrow
 
 import pandas as pd
 from psycopg2 import pool
@@ -19,7 +19,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 load_dotenv()
 
 logging.basicConfig(
-    filename="journal_opensearch_aws.log",
+    filename="textbook_opensearch_aws.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -36,40 +36,6 @@ auth = AWSV4SignerAuth(credentials, region, service)
 s3_client = boto3.client("s3")
 
 
-# def list_all_objects(bucket_name, prefix):
-#     paginator = s3_client.get_paginator("list_objects_v2")
-#     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-
-#     docs = []
-#     for page in page_iterator:
-#         if "Contents" in page:
-#             for obj in page["Contents"]:
-#                 key = obj["Key"]
-#                 if key.endswith(".pkl"):
-#                     docs.append(key)
-#     return docs
-
-
-def list_all_objects(bucket_name, prefix):
-    paginator = s3_client.get_paginator("list_objects_v2")
-    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-
-    docs = []
-    count = 0
-    for page in page_iterator:
-        if "Contents" in page:
-            for obj in page["Contents"]:
-                if count >= 10:
-                    break
-                key = obj["Key"]
-                if key.endswith(".pkl"):
-                    docs.append(key)
-                    count += 1
-        if count >= 10:
-            break
-    return docs
-
-
 def load_pickle_from_s3(bucket_name, s3_key):
     response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
     body = response["Body"].read()
@@ -78,17 +44,8 @@ def load_pickle_from_s3(bucket_name, s3_key):
 
 
 bucket_name = "tiangong"
-prefix = "processed_docs/journal_pickle/"
-suffix = ".pdf.pkl"
-
-
-def extract_doi_from_path(path):
-    doi = path[len(prefix) :][: -len(suffix)]
-    return doi
-
-
-docs = list_all_objects(bucket_name, prefix)
-
+prefix = "processed_docs/edu_textbooks_pickle/"
+suffix = ".pkl"
 
 client = OpenSearch(
     hosts=[{"host": host, "port": 443}],
@@ -101,24 +58,42 @@ client = OpenSearch(
 )
 
 # Create the index
-sci_mapping = {
+textbook_mapping = {
+    "settings": {"analysis": {"analyzer": {"smartcn": {"type": "smartcn"}}}},
     "mappings": {
         "properties": {
-            "text": {"type": "text"},
-            "doi": {
+            "rec_id": {"type": "keyword"},
+            "text": {"type": "text", "analyzer": "smartcn"},
+            "title": {
+                "type": "text",
+                "analyzer": "smartcn",
+            },
+            "author": {
+                "type": "text",
+                "analyzer": "smartcn",
+            },
+            "publication_date": {"type": "date", "format": "epoch_second"},
+            "isbn_number": {"type": "keyword"},
+            "page_number": {
                 "type": "keyword",
             },
-            "journal": {
-                "type": "keyword",
-            },
-            "date": {"type": "date", "format": "epoch_second"},
         },
     },
 }
 
-if not client.indices.exists(index="sci"):
-    client.indices.create(index="sci", body=sci_mapping)
-    print("'sci' index Created.")
+if not client.indices.exists(index="textbooks"):
+    client.indices.create(index="textbooks", body=textbook_mapping)
+    print("'textbooks' index Created.")
+
+
+def to_unix_timestamp(date_str: str) -> int:
+    try:
+        # Parse the date string using arrow
+        date_obj = arrow.get(date_str)
+        return int(date_obj.timestamp())
+    except arrow.parser.ParserError:
+        # If the parsing fails, return the current unix timestamp and log a warning
+        return int(arrow.now().timestamp())
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -142,24 +117,14 @@ def get_embeddings(items, model="text-embedding-3-small"):
         text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
         length = len(text_list)
         results = []
-
         for i in range(0, length, 1000):
             result = client.embeddings.create(
                 input=text_list[i : i + 1000], model=model
             ).data
             results += result
         return results
-
     except Exception as e:
         print(e)
-
-
-def load_pickle_list(file_path):
-    with open(file_path, "rb") as f:
-        data = pickle.load(f)
-    # clean_data = [item[0] for item in data if isinstance(item, tuple)]
-
-    return data
 
 
 def split_dataframe_table(html_table, chunk_size=8100):
@@ -224,22 +189,6 @@ def merge_pickle_list(data):
     return result
 
 
-def get_files_before(directory, target_time):
-    old_files = set()
-    # 获取指定时间的时间戳
-    target_timestamp = target_time
-
-    for root, _, files in os.walk(directory):
-        for file in files:
-            file_path = os.path.join(root, file)
-            # 获取文件的修改时间
-            stat = os.stat(file_path)
-            file_ctime = stat.st_mtime
-            if file_ctime < target_timestamp:
-                relative_path = os.path.relpath(file_path, directory)
-                old_files.add(relative_path)
-    return old_files
-
 conn_pool = pool.SimpleConnectionPool(
     1,
     20,  # min and max number of connections
@@ -253,40 +202,44 @@ conn_pool = pool.SimpleConnectionPool(
 with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL AND fulltext_time IS NULL"
+            """SELECT id, title, authors, isbn_number,publish_time FROM edu_textbooks WHERE pdf_exist is NULL"""
         )
         records = cur.fetchall()
 
-dois = [record[0] for record in records]
-journals = {record[0]: record[1] for record in records}
-dates = {record[0]: record[2] for record in records}
+ids = [record[0] for record in records]
+titles = {record[0]: record[1] for record in records}
+authors = {record[0]: record[2] for record in records}
+isbn_numbers = {record[0]: record[3] for record in records}
+publish_times = {record[0]: record[4] for record in records}
 
-docs_dois = [unquote(unquote(extract_doi_from_path(doc))) for doc in docs]
+files = [str(id) + ".pkl" for id in ids]
 
-df = pd.DataFrame({"doi": docs_dois, "path": docs})
-
-for index, row in df.iterrows():
+for file in files:
     try:
-        data = load_pickle_from_s3(bucket_name, row['path'])
+        data = load_pickle_from_s3(bucket_name, prefix + file)
         data = merge_pickle_list(data)
         data = fix_utf8(data)
-        embeddings = get_embeddings(data)
 
-        file_id = row['doi']
-        journal = journals[file_id]
-        date = int(dates[file_id].timestamp())
+        file_id = file.split(".")[0]
+        title = titles[file_id]
+        author = ", ".join(authors[file_id])
+        isbn_number = isbn_numbers[file_id]
+        publish_time = to_unix_timestamp(publish_times[file_id])
 
         fulltext_list = []
         for index, d in enumerate(data):
             fulltext_list.append(
-                {"index": {"_index": "edu"}}
+                {"index": {"_index": "textbooks", "_id": file_id + "_" + str(index)}}
             )
             fulltext_list.append(
                 {
-                    "text": data[index],
-                    "doi": file_id,
-                    "journal": journal,
-                    "date": date,
+                    "text": data[index][0],
+                    "page_number": data[index][1],
+                    "rec_id": file_id,
+                    "title": title,
+                    "author": author,
+                    "isbn_number": isbn_number,
+                    "publication_date": publish_time,
                 }
             )
         n = len(fulltext_list)
@@ -299,7 +252,7 @@ for index, row in df.iterrows():
         try:
             with conn_pg.cursor() as cur:
                 cur.execute(
-                    "UPDATE journal SET fulltext_time = %s WHERE doi = %s",
+                    "UPDATE edu_textbooks SET fulltext_time = %s WHERE id = %s",
                     (datetime.now(UTC), file_id),
                 )
                 conn_pg.commit()
@@ -308,6 +261,6 @@ for index, row in df.iterrows():
             # Release the connection back to the pool
             conn_pool.putconn(conn_pg)
     except Exception:
-        logging.error(f"Error processing {row['path']}")
+        logging.error(f"Error processing {file_id}")
 # Close the connection pool
 conn_pool.closeall()

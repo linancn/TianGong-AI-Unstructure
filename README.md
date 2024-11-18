@@ -209,4 +209,7 @@ nohup .venv/bin/python3 src/journals/2_pickle_to_pinecone_aws.py > journal_pinec
 
 nohup .venv/bin/python3 src/patents/1_pickle_2_pinecone.py > patents_2_pinecone_log.txt 2>&1 &
 nohup .venv/bin/python3 src/patents/1_pickle_2_opensearch_aws.py > patents_2_opensearch_log.txt 2>&1 &
+
+nohup .venv/bin/python3 src/edu_textbooks/pickle_to_pinecone_aws.py > textbook_pinecone_log.txt 2>&1 &
+nohup .venv/bin/python3 src/edu_textbooks/pickle_to_opensearch_aws.py > textbook_opensearch_log.txt 2>&1 &
 ```
