@@ -1,8 +1,9 @@
-
+from dotenv import load_dotenv
 import pickle
 
 from tools.chunk_by_sci_pdf import sci_chunk
 
+load_dotenv()
 
 with open("journal_pdf_list_3.pkl", "rb") as f:
     pdf_lists = pickle.load(f)

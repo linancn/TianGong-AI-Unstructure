@@ -3,9 +3,8 @@ import os
 import pickle
 from datetime import UTC, datetime
 from io import StringIO
-from urllib.parse import unquote, quote
+from urllib.parse import unquote
 
-import arrow
 import pandas as pd
 from psycopg2 import pool
 import tiktoken
@@ -20,7 +19,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 load_dotenv()
 
 logging.basicConfig(
-    filename="journal_opensearch_aws_Nov7.log",
+    filename="journal_opensearch_aws.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -88,16 +87,6 @@ def extract_doi_from_path(path):
     return doi
 
 
-def to_unix_timestamp(date_str: str) -> int:
-    try:
-        # Parse the date string using arrow
-        date_obj = arrow.get(date_str)
-        return int(date_obj.timestamp())
-    except arrow.parser.ParserError:
-        # If the parsing fails, return the current unix timestamp and log a warning
-        return int(arrow.now().timestamp())
-
-
 docs = list_all_objects(bucket_name, prefix)
 
 
@@ -141,9 +130,28 @@ def num_tokens_from_string(string: str) -> int:
 def fix_utf8(original_list):
     cleaned_list = []
     for original_str in original_list:
-        cleaned_str = original_str.replace("\ufffd", " ")
-        cleaned_list.append(cleaned_str)
+        cleaned_str = original_str[0].replace("\ufffd", " ")
+        cleaned_list.append([cleaned_str, original_str[1]])
     return cleaned_list
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def get_embeddings(items, model="text-embedding-3-small"):
+    text_list = [item[0] for item in items]
+    try:
+        text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
+        length = len(text_list)
+        results = []
+
+        for i in range(0, length, 1000):
+            result = client.embeddings.create(
+                input=text_list[i : i + 1000], model=model
+            ).data
+            results += result
+        return results
+
+    except Exception as e:
+        print(e)
 
 
 def load_pickle_list(file_path):
@@ -188,30 +196,30 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        if num_tokens_from_string(d) > 8100:
-            soup = BeautifulSoup(d, "html.parser")
+        if num_tokens_from_string(d[0]) > 8100:
+            soup = BeautifulSoup(d[0], "html.parser")
             tables = soup.find_all("table")
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
                     if table_content:  # check if table_content is not empty
-                        result.append(table_content)
+                        result.append([table_content, d[1]])
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append(str(soup))
+                                result.append([str(soup), d[1]])
                     except Exception as e:
                         logging.error(f"Error splitting dataframe table: {e}")
-        elif num_tokens_from_string(d) < 15:
-            temp += d + " "
+        elif num_tokens_from_string(d[0]) < 15:
+            temp += d[0] + " "
         else:
-            result.append((temp + d))
+            result.append([(temp + d[0]), d[1]])
             temp = ""
     if temp:
-        result.append(temp)
+        result.append([temp, d[1]])
 
     return result
 
@@ -232,7 +240,6 @@ def get_files_before(directory, target_time):
                 old_files.add(relative_path)
     return old_files
 
-
 conn_pool = pool.SimpleConnectionPool(
     1,
     20,  # min and max number of connections
@@ -246,7 +253,7 @@ conn_pool = pool.SimpleConnectionPool(
 with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            "SELECT doi,journal,date FROM journals WHERE embedding_time > '2024-10-21 00:00:00'"
+            "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL AND fulltext_time IS NULL"
         )
         records = cur.fetchall()
 
@@ -254,30 +261,25 @@ dois = [record[0] for record in records]
 journals = {record[0]: record[1] for record in records}
 dates = {record[0]: record[2] for record in records}
 
+docs_dois = [unquote(unquote(extract_doi_from_path(doc))) for doc in docs]
 
-def doi_to_path(doi):
-    return f"{prefix}{quote(quote(doi))}{suffix}"
-
-
-# docs_dois = [unquote(unquote(extract_doi_from_path(doc))) for doc in docs]
-
-df = pd.DataFrame({"doi": dois})
-df["path"] = df["doi"].apply(doi_to_path)
+df = pd.DataFrame({"doi": docs_dois, "path": docs})
 
 for index, row in df.iterrows():
     try:
-        data = load_pickle_from_s3(bucket_name, row["path"])
+        data = load_pickle_from_s3(bucket_name, row['path'])
         data = merge_pickle_list(data)
         data = fix_utf8(data)
+        embeddings = get_embeddings(data)
 
-        file_id = row["doi"]
+        file_id = row['doi']
         journal = journals[file_id]
-        date = to_unix_timestamp(dates[file_id])
+        date = int(dates[file_id].timestamp())
 
         fulltext_list = []
         for index, d in enumerate(data):
             fulltext_list.append(
-                {"index": {"_index": "sci", "_id": file_id + "_" + str(index)}}
+                {"index": {"_index": "edu"}}
             )
             fulltext_list.append(
                 {
@@ -297,7 +299,7 @@ for index, row in df.iterrows():
         try:
             with conn_pg.cursor() as cur:
                 cur.execute(
-                    "UPDATE journals SET fulltext_time = %s WHERE doi = %s",
+                    "UPDATE journal SET fulltext_time = %s WHERE doi = %s",
                     (datetime.now(UTC), file_id),
                 )
                 conn_pg.commit()
@@ -305,7 +307,7 @@ for index, row in df.iterrows():
         finally:
             # Release the connection back to the pool
             conn_pool.putconn(conn_pg)
-    except Exception as e:
-        logging.error(f"Error processing {row['path']}: {e}")
+    except Exception:
+        logging.error(f"Error processing {row['path']}")
 # Close the connection pool
 conn_pool.closeall()

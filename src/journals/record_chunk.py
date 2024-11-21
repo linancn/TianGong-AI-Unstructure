@@ -13,11 +13,31 @@ conn_pg = psycopg2.connect(
 )
 
 
+# with conn_pg.cursor() as cur:
+#     cur.execute(
+#         "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL"
+#     )
+#     results = cur.fetchall()
+
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT doi,journal,date FROM journals WHERE upload_time IS NOT NULL"
+        "SELECT COUNT(*) FROM journals WHERE upload_time IS NOT NULL"
     )
-    results = cur.fetchall()
+    total_records = cur.fetchone()[0]
+    offset = 0
+    batch_size = 3000
+
+    results = []
+    while offset < total_records:
+        cur.execute(
+            "SELECT doi, journal, date FROM journals WHERE upload_time IS NOT NULL LIMIT %s OFFSET %s",
+            (batch_size, offset)
+        )
+        batch_results = cur.fetchall()
+        if not batch_results:
+            break
+        results.extend(batch_results)
+        offset += batch_size
 
 pdf_list = []
 for record in results:
@@ -59,13 +79,14 @@ def split_list(lst, n):
     return [lst[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
 # 分割后的列表
-split_pdf_lists = split_list(missing_pdf_list, 4)
+split_pdf_lists = split_list(missing_pdf_list, 3)
 
 # 保存每份数据到一个pickle文件中
 for i, pdf_list_part in enumerate(split_pdf_lists):
     with open(f'journal_pdf_list_{i}.pkl', 'wb') as f:
         pickle.dump(pdf_list_part, f)
 
+conn_pg.close()
 
 
 # missing_pdf_paths_aa = set([pdf['pdf_path'] for pdf in missing_pdf_list])

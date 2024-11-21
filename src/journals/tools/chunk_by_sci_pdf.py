@@ -129,17 +129,21 @@ def sci_chunk(pdf_list, vision=False):
     min_image_height = 270
 
     # 分割文档
-    elements = partition_pdf(
-        filename=pdf_path,
-        header_footer=False,
-        pdf_extract_images=vision,
-        pdf_image_output_dir_path=tempfile.gettempdir(),
-        # pdf_infer_table_structure=True,
-        skip_infer_table_types=["jpg", "png", "xls", "xlsx", "heic"],
-        strategy="hi_res",
-        hi_res_model_name="yolox",
-        languages=["eng"],
-    )
+    try:
+        elements = partition_pdf(
+            filename=pdf_path,
+            header_footer=False,
+            pdf_extract_images=vision,
+            pdf_image_output_dir_path=tempfile.gettempdir(),
+            # pdf_infer_table_structure=True,
+            skip_infer_table_types=["jpg", "png", "xls", "xlsx", "heic"],
+            strategy="hi_res",
+            hi_res_model_name="yolox",
+            languages=["eng"],
+        )
+    except Exception as e:
+        print(f"Error processing PDF {pdf_path}: {e}")
+        return
 
     skip = False
     filtered_elements = []
