@@ -152,14 +152,15 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, course, file_type, language FROM edu_meta WHERE upload_time IS NOT NULL and embedding_time IS NULL"
+        "SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL"
     )
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
 courses = {record[0]: record[1] for record in records}
 file_types = {record[0]: record[2] for record in records}
-languages = {record[0]: record[3] for record in records}
+names = {record[0]: record[3] for record in records}
+chapter_numbers = {record[0]: record[4] for record in records}
 
 files = [str(id) + file_types[id] + ".pkl" for id in ids]
 
@@ -176,7 +177,8 @@ for file in files:
 
     file_id = file.split(".")[0]
     course = courses[file_id]
-    language = languages[file_id]
+    name = names[file_id]
+    chapter_number = chapter_numbers[file_id]
 
     vectors = []
     for index, e in enumerate(embeddings):
@@ -188,7 +190,8 @@ for file in files:
                     "text": data[index],
                     "rec_id": file_id,
                     "course": course,
-                    "language": language,
+                    "name": name,
+                    "chapter_number": chapter_number,
 
                 },
             }

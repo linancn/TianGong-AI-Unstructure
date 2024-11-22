@@ -6,7 +6,8 @@ from io import StringIO
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from opensearchpy import OpenSearch
+from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+import boto3
 from tenacity import retry, stop_after_attempt, wait_fixed
 import pandas as pd
 import psycopg2
@@ -22,22 +23,30 @@ logging.basicConfig(
     force=True,
 )
 
+host = os.environ.get("AWS_OPENSEARCH_URL")
+region = "us-east-1"
+
+service = "aoss"
+credentials = boto3.Session().get_credentials()
+auth = AWSV4SignerAuth(credentials, region, service)
+
 client = OpenSearch(
-    hosts=[{"host": os.getenv("OPENSEARCH_HOST"), "port": 9200}],
-    http_compress=True,
-    http_auth=(os.getenv("OPENSEARCH_USERNAME"), os.getenv("OPENSEARCH_PASSWORD")),
+    hosts=[{"host": host, "port": 443}],
+    http_auth=auth,
     use_ssl=True,
-    verify_certs=False,
-    ssl_assert_hostname=False,
-    ssl_show_warn=False,
+    verify_certs=True,
+    connection_class=RequestsHttpConnection,
+    pool_maxsize=20,
+    timeout=300,
 )
+
 internal_use_mapping = {
+    "settings": {"analysis": {"analyzer": {"smartcn": {"type": "smartcn"}}}},
     "mappings": {
         "properties": {
             "text": {
                 "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
+                "analyzer": "smartcn",
             },
             "rec_id": {"type": "keyword"},
             "tag": {"type": "keyword"},

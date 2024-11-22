@@ -10,7 +10,8 @@ import psycopg2
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from opensearchpy import OpenSearch
+from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+import boto3
 
 # from supabase import create_client, Client
 
@@ -24,6 +25,13 @@ logging.basicConfig(
     force=True,
 )
 
+host = os.environ.get("AWS_OPENSEARCH_URL")
+region = "us-east-1"
+
+service = "aoss"
+credentials = boto3.Session().get_credentials()
+auth = AWSV4SignerAuth(credentials, region, service)
+
 # supabase_url= os.environ.get("LOCAL_SUPABASE_URL")
 # supabase_anon_key = os.environ.get("LOCAL_SUPABASE_ANON_KEY")
 # email = os.environ.get("EMAIL")
@@ -34,22 +42,22 @@ logging.basicConfig(
 # data = supabase.table("esg_meta").update({"category": "999"}).eq("id", '91c91b60-a6c9-4100-856e-97da70f3a4d0').execute()
 
 client = OpenSearch(
-    hosts=[{"host": os.getenv("OPENSEARCH_HOST"), "port": 9200}],
-    http_compress=True,
-    http_auth=(os.getenv("OPENSEARCH_USERNAME"), os.getenv("OPENSEARCH_PASSWORD")),
+    hosts=[{"host": host, "port": 443}],
+    http_auth=auth,
     use_ssl=True,
-    verify_certs=False,
-    ssl_assert_hostname=False,
-    ssl_show_warn=False,
+    verify_certs=True,
+    connection_class=RequestsHttpConnection,
+    pool_maxsize=20,
+    timeout=300,
 )
 
 internal_use_mapping = {
+    "settings": {"analysis": {"analyzer": {"smartcn": {"type": "smartcn"}}}},
     "mappings": {
         "properties": {
             "text": {
                 "type": "text",
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_smart",
+                "analyzer": "smartcn",
             },
             "rec_id": {"type": "keyword"},
             "tag": {"type": "keyword"},
@@ -70,8 +78,8 @@ def num_tokens_from_string(string: str) -> int:
 def fix_utf8(original_list):
     cleaned_list = []
     for original_str in original_list:
-        cleaned_str = original_str[0].replace("\ufffd", " ")
-        cleaned_list.append([cleaned_str, original_str[1]])
+        cleaned_str = original_str.replace("\ufffd", " ")
+        cleaned_list.append(cleaned_str)
     return cleaned_list
 
 
@@ -122,23 +130,23 @@ def merge_pickle_list(data):
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
                     if table_content:  # check if table_content is not empty
-                        result.append([table_content, d[1]])
+                        result.append(table_content)
                 else:
                     try:
                         sub_tables = split_dataframe_table(table_content)
                         for sub_table in sub_tables:
                             if sub_table:
                                 soup = BeautifulSoup(sub_table, "html.parser")
-                                result.append([str(soup), d[1]])
+                                result.append(str(soup))
                     except Exception as e:
                         logging.error(f"Error splitting dataframe table: {e}")
         elif num_tokens_from_string(d[0]) < 15:
             temp += d[0] + " "
         else:
-            result.append([(temp + d[0]), d[1]])
+            result.append(temp + d[0])
             temp = ""
     if temp:
-        result.append([temp, d[1]])
+        result.append(temp)
 
     return result
 
@@ -183,7 +191,7 @@ for file in files:
         )
         fulltext_list.append(
             {
-                "text": data[index][0],
+                "text": data[index],
                 "rec_id": file_id,
                 "title": title,
                 "tag": tag,
