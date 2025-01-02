@@ -36,38 +36,38 @@ auth = AWSV4SignerAuth(credentials, region, service)
 s3_client = boto3.client("s3")
 
 
-# def list_all_objects(bucket_name, prefix):
-#     paginator = s3_client.get_paginator("list_objects_v2")
-#     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-
-#     docs = []
-#     for page in page_iterator:
-#         if "Contents" in page:
-#             for obj in page["Contents"]:
-#                 key = obj["Key"]
-#                 if key.endswith(".pkl"):
-#                     docs.append(key)
-#     return docs
-
-
 def list_all_objects(bucket_name, prefix):
     paginator = s3_client.get_paginator("list_objects_v2")
     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
     docs = []
-    count = 0
     for page in page_iterator:
         if "Contents" in page:
             for obj in page["Contents"]:
-                if count >= 10:
-                    break
                 key = obj["Key"]
                 if key.endswith(".pkl"):
                     docs.append(key)
-                    count += 1
-        if count >= 10:
-            break
     return docs
+
+
+# def list_all_objects(bucket_name, prefix):
+#     paginator = s3_client.get_paginator("list_objects_v2")
+#     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+
+#     docs = []
+#     count = 0
+#     for page in page_iterator:
+#         if "Contents" in page:
+#             for obj in page["Contents"]:
+#                 if count >= 10:
+#                     break
+#                 key = obj["Key"]
+#                 if key.endswith(".pkl"):
+#                     docs.append(key)
+#                     count += 1
+#         if count >= 10:
+#             break
+#     return docs
 
 
 def load_pickle_from_s3(bucket_name, s3_key):
@@ -88,6 +88,10 @@ def extract_doi_from_path(path):
 
 
 docs = list_all_objects(bucket_name, prefix)
+
+#写入pickle
+with open("docs_s3.pkl", "wb") as f:
+    pickle.dump(docs, f)
 
 
 client = OpenSearch(

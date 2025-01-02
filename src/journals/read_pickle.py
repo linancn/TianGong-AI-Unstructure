@@ -1,23 +1,42 @@
 import pickle
+import os
 
 # from tools.chunk_by_sci_pdf import sci_chunk
 
-with open("docs_intersection_Oct26.pkl", "rb") as f: 
-    pdf_paths_329367 = pickle.load(f)
+with open("docs_s3.pkl", "rb") as f: 
+    docs_s3 = pickle.load(f)
 
-with open("journal_pdf_list_0.pkl", "rb") as f:
-    pdf_lists0 = pickle.load(f)
+#读取processed_docs/journal_pickle/下所有的pickle文件的完整路径
+def get_pickle_file_paths(directory):
+    pickle_files = []
+    # Walk through directory and subdirectories
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.pkl'):
+                pickle_files.append(os.path.join(root, file))
+    return pickle_files
 
-with open("journal_pdf_list_1.pkl", "rb") as f:
-    pdf_lists1 = pickle.load(f)
+# Example usage
+directory = 'processed_docs/journal_pickle/'
+docs_local = get_pickle_file_paths(directory)
 
-with open("journal_pdf_list_2.pkl", "rb") as f:
-    pdf_lists2 = pickle.load(f)
+# Convert lists to sets for set operations
+docs_s3_set = set(docs_s3)
+docs_local_set = set(docs_local)
 
-with open("journal_pdf_list_3.pkl", "rb") as f:
-    pdf_lists3 = pickle.load(f)
+# Find records in docs_s3 but not in docs_local
+in_s3_not_in_local = docs_s3_set - docs_local_set
+
+# Find records in docs_local but not in docs_s3
+in_local_not_in_s3 = docs_local_set - docs_s3_set
+
+#打印in_local_not_in_s3前100个
+print(list(in_local_not_in_s3)[:100])
+
+print(f"Number of records in s3 but not in local: {len(in_s3_not_in_local)}")
+
 
 #merge pdf_lists
-pdf_lists = pdf_lists0 + pdf_lists1 + pdf_lists2 + pdf_lists3
+# pdf_lists = pdf_lists0 + pdf_lists1 + pdf_lists2 + pdf_lists3
 
-print(f"pdf_lists0: {len(pdf_lists0)}")
+# print(f"pdf_lists0: {len(pdf_lists0)}")
