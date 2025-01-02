@@ -22,7 +22,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 load_dotenv()
 
 logging.basicConfig(
-    filename="journal_pinecone_aws_Oct31.log",
+    filename="journal_pinecone_aws_Nov26.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -81,7 +81,7 @@ def load_pickle_from_s3(bucket_name, s3_key):
 
 bucket_name = "tiangong"
 prefix = "processed_docs/journal_pickle/"
-suffix = ".pdf.pkl"
+suffix = ".pkl"
 
 
 def extract_doi_from_path(path):
@@ -110,8 +110,8 @@ def convert_pdf_to_pickle_path(pdf_path):
 # with open(f"docs_intersection_Oct26.pkl", "rb") as f:
 #     docs_intersection = pickle.load(f)
 
-with open(f"docs_intersection_Oct31.pkl", "rb") as f:
-    docs_intersection = pickle.load(f)
+# with open(f"docs_intersection_Oct31.pkl", "rb") as f:
+#     docs_intersection = pickle.load(f)
 
 def to_unix_timestamp(date_str: str) -> int:
     try:
@@ -253,32 +253,22 @@ conn_pool = pool.SimpleConnectionPool(
 with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            """SELECT doi, journal, date FROM journals WHERE embedding_time IS NOT NULL AND embedding_time < '2024-10-20T00:00:00+00:00'""" # 改为embedding_time早于XXX
+            """SELECT id, doi, journal, date FROM journals WHERE upload_time IS NOT NULL AND embedding_time < '2024-10-22T00:00:00+00:00'""" # 改为embedding_time早于XXX
         )
         records = cur.fetchall()
 
-dois = [record[0] for record in records]
-journals = {record[0]: record[1] for record in records}
-dates = {record[0]: record[2] for record in records}
+conn_pg = conn_pool.getconn()
 
-docs_dois = [
-    unquote(unquote(extract_doi_from_path(doc))) for doc in docs_intersection
-]
-
-df = pd.DataFrame({"doi": docs_dois, "path": docs_intersection})
-# 进行内连接，只保留dois和df中"doi"都有的元素
-df = df[df['doi'].isin(dois)]
-
-for index, row in df.iterrows():
+for record in records:
     try:
-        data = load_pickle_from_s3(bucket_name, row["path"])
+        data = load_pickle_from_s3(bucket_name, prefix + record[0] + ".pkl")
         data = merge_pickle_list(data)
         data = fix_utf8(data)
         embeddings = get_embeddings(data)
 
-        file_id = row["doi"]
-        journal = journals[file_id]
-        date = to_unix_timestamp(dates[file_id])
+        file_id = record[1]
+        journal = record[2]
+        date = to_unix_timestamp(record[3])
 
         vectors = []
         for index, e in enumerate(embeddings):
@@ -300,7 +290,6 @@ for index, row in df.iterrows():
             )
 
             # Get a connection from the pool
-            conn_pg = conn_pool.getconn()
             with conn_pg.cursor() as cur:
                 cur.execute(
                     "UPDATE journals SET embedding_time = %s WHERE doi = %s",
@@ -309,12 +298,11 @@ for index, row in df.iterrows():
                 conn_pg.commit()
                 logging.info(f"Updated {file_id} in the database.")
         except Exception as e:
-            conn_pg.rollback()
-            print(f"Error: {e}")
-        finally:
-            # Release the connection back to the pool
-            conn_pool.putconn(conn_pg)
-    except Exception:
-        logging.error(f"Error processing {row['path']}")
+            logging.error(f"Error: {e}")
+    except Exception as e:
+        logging.error(f"Error processing {file_id}: {e}")
+
+        # Release the connection back to the pool
+conn_pool.putconn(conn_pg)
 # Close the connection pool
 conn_pool.closeall()

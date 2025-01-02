@@ -3,11 +3,14 @@ import os
 import pickle
 from datetime import UTC, datetime
 from io import StringIO
+import arrow
+
 import pandas as pd
-import psycopg2
+from psycopg2 import pool
 import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
 import boto3
 from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 
@@ -15,7 +18,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 load_dotenv()
 
 logging.basicConfig(
-    filename="education_opensearch.log",
+    filename="journal_opensearch_aws.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -31,19 +34,9 @@ auth = AWSV4SignerAuth(credentials, region, service)
 
 s3_client = boto3.client("s3")
 
-
-def list_all_objects(bucket_name, prefix):
-    paginator = s3_client.get_paginator("list_objects_v2")
-    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-
-    docs = []
-    for page in page_iterator:
-        if "Contents" in page:
-            for obj in page["Contents"]:
-                key = obj["Key"]
-                if key != prefix:
-                    docs.append(key)
-    return docs
+bucket_name = "tiangong"
+prefix = "processed_docs/journal_pickle/"
+suffix = ".pkl"
 
 
 def load_pickle_from_s3(bucket_name, s3_key):
@@ -52,11 +45,6 @@ def load_pickle_from_s3(bucket_name, s3_key):
     data = pickle.loads(body)
     return data
 
-
-bucket_name = "tiangong"
-prefix = "processed_docs/education_pickle/"
-
-# docs = list_all_objects(bucket_name, prefix)
 
 client = OpenSearch(
     hosts=[{"host": host, "port": 443}],
@@ -69,30 +57,34 @@ client = OpenSearch(
 )
 
 # Create the index
-edu_mapping = {
-    "settings": {"analysis": {"analyzer": {"smartcn": {"type": "smartcn"}}}},
+sci_mapping = {
     "mappings": {
         "properties": {
-            "text": {"type": "text", "analyzer": "smartcn"},
-            "rec_id": {
+            "text": {"type": "text"},
+            "doi": {
                 "type": "keyword",
             },
-            "course": {
+            "journal": {
                 "type": "keyword",
             },
-            "name": {
-                "type": "keyword",
-            },
-            "chapter_number": {
-                "type": "keyword",
-            },
+            "date": {"type": "date", "format": "epoch_second"},
         },
     },
 }
 
-if not client.indices.exists(index="edu"):
-    print("Creating 'edu' index...")
-    client.indices.create(index="edu", body=edu_mapping)
+if not client.indices.exists(index="sci"):
+    client.indices.create(index="sci", body=sci_mapping)
+    print("'sci' index Created.")
+
+
+def to_unix_timestamp(date_str: str) -> int:
+    try:
+        # Parse the date string using arrow
+        date_obj = arrow.get(date_str)
+        return int(date_obj.timestamp())
+    except arrow.parser.ParserError:
+        # If the parsing fails, return the current unix timestamp and log a warning
+        return int(arrow.now().timestamp())
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -112,6 +104,8 @@ def fix_utf8(original_list):
 def load_pickle_list(file_path):
     with open(file_path, "rb") as f:
         data = pickle.load(f)
+    # clean_data = [item[0] for item in data if isinstance(item, tuple)]
+
     return data
 
 
@@ -149,7 +143,6 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        d = d['text']
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -178,7 +171,9 @@ def merge_pickle_list(data):
     return result
 
 
-conn_pg = psycopg2.connect(
+conn_pool = pool.SimpleConnectionPool(
+    1,
+    20,  # min and max number of connections
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),
@@ -186,54 +181,54 @@ conn_pg = psycopg2.connect(
     port=os.getenv("POSTGRES_PORT"),
 )
 
-with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL and fulltext_time IS NULL")
-    records = cur.fetchall()
-
-ids = [record[0] for record in records]
-courses = {record[0]: record[1] for record in records}
-file_types = {record[0]: record[2] for record in records}
-names = {record[0]: record[3] for record in records}
-chapter_numbers = {record[0]: record[4] for record in records}
-
-keys = [str(id) + ".pkl" for id in ids]
-
-for key in keys:
-    data = load_pickle_from_s3(bucket_name, prefix + key)
-    data = merge_pickle_list(data)
-    data = fix_utf8(data)
-
-    file_id = key.split(".")[0]
-    course = courses[file_id]
-    name = names[file_id]
-    chapter_number = chapter_numbers[file_id]
-
-    fulltext_list = []
-    for index, d in enumerate(data):
-        fulltext_list.append(
-            {"index": {"_index": "edu", "_id": file_id + "_" + str(index)}}
-        )
-        fulltext_list.append(
-            {
-                "text": data[index],
-                "rec_id": file_id,
-                "course": course,
-                "name": name,
-                "chapter_number": chapter_number,
-            }
-        )
-    n = len(fulltext_list)
-    for i in range(0, n, 500):
-        batch = fulltext_list[i : i + 500]
-        client.bulk(body=batch)
-
+with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            "UPDATE edu_meta SET fulltext_time = %s WHERE id = %s",
-            (datetime.now(UTC), file_id),
+            "SELECT id,doi,journal,date FROM journals WHERE upload_time IS NOT NULL AND fulltext_time IS NULL"
         )
-        conn_pg.commit()
+        records = cur.fetchall()
 
-    logging.info(f"Fulltext indexed for {file_id}")
+conn_pg = conn_pool.getconn()
 
-conn_pg.close()
+for record in records:
+    try:
+        data = load_pickle_from_s3(bucket_name, prefix + record[0] + ".pkl")
+        data = merge_pickle_list(data)
+        data = fix_utf8(data)
+
+        file_id = record[1]
+        journal = record[2]
+        date = to_unix_timestamp(record[3])
+
+        fulltext_list = []
+        for index, d in enumerate(data):
+            fulltext_list.append(
+                {"index": {"_index": "sci", "_id": file_id + "_" + str(index)}}
+            )
+            fulltext_list.append(
+                {
+                    "text": data[index],
+                    "doi": file_id,
+                    "journal": journal,
+                    "date": date,
+                }
+            )
+        n = len(fulltext_list)
+        for i in range(0, n, 500):
+            batch = fulltext_list[i : i + 500]
+            client.bulk(body=batch)
+
+            with conn_pg.cursor() as cur:
+                cur.execute(
+                    "UPDATE journals SET fulltext_time = %s WHERE doi = %s",
+                    (datetime.now(UTC), file_id),
+                )
+                conn_pg.commit()
+                logging.info(f"Updated {file_id} in the database.")
+
+    except Exception:
+        logging.error(f"Error processing {record[0]}")
+
+conn_pool.putconn(conn_pg)
+# Close the connection pool
+conn_pool.closeall()
