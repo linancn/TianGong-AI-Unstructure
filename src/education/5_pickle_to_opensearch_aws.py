@@ -196,7 +196,7 @@ file_types = {record[0]: record[2] for record in records}
 names = {record[0]: record[3] for record in records}
 chapter_numbers = {record[0]: record[4] for record in records}
 
-keys = [str(id) + ".pkl" for id in ids]
+keys = [str(id) + file_types[id] + ".pkl" for id in ids]
 
 for key in keys:
     data = load_pickle_from_s3(bucket_name, prefix + key)

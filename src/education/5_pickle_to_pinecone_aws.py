@@ -2,7 +2,6 @@ import logging
 import os
 import pickle
 from datetime import UTC, datetime
-import datetime
 from io import StringIO
 import pandas as pd
 import psycopg2
@@ -12,7 +11,7 @@ from dotenv import load_dotenv
 import boto3
 from openai import OpenAI
 from pinecone import Pinecone
-from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
+from opensearchpy import AWSV4SignerAuth
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 
@@ -194,7 +193,7 @@ file_types = {record[0]: record[2] for record in records}
 names = {record[0]: record[3] for record in records}
 chapter_numbers = {record[0]: record[4] for record in records}
 
-keys = [str(id) + ".pkl" for id in ids]
+keys = [str(id) + file_types[id] + ".pkl" for id in ids]
 
 update_data = []
 

@@ -203,6 +203,8 @@ pkill -f src/journals/chunk_by_title_sci_3.py
 
 
 find processed_docs/journal_pickle/ -type f | wc -l
+find processed_docs/journal_pickle/ -maxdepth 1 -type f | wc -l
+find processed_docs/journal_pickle/ -type f -exec ls -lS {} + | sort -n -k 5 | head -n 10
 ls -ltR processed_docs/journal_pickle/ | head -n 10
 
 nohup .venv/bin/python3 src/journals/2_pickle_to_pinecone_aws.py > journal_pinecone_aws_Oct31_log.txt 2>&1 &
@@ -212,4 +214,9 @@ nohup .venv/bin/python3 src/patents/1_pickle_2_opensearch_aws.py > patents_2_ope
 
 nohup .venv/bin/python3 src/edu_textbooks/pickle_to_pinecone_aws.py > textbook_pinecone_log.txt 2>&1 &
 nohup .venv/bin/python3 src/edu_textbooks/pickle_to_opensearch_aws.py > textbook_opensearch_log.txt 2>&1 &
+
+
+nohup .venv/bin/python3.12 src/education/0_pdf_pickle_service_0.py 2>&1 &
+nohup .venv/bin/python3.12 src/education/0_pdf_pickle_service_1.py 2>&1 &
+nohup .venv/bin/python3.12 src/education/0_pdf_pickle_service_2.py 2>&1 &
 ```

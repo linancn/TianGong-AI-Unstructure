@@ -178,3 +178,4 @@ esg_meta_txt/
 *.pkl
 nohup.out
 processed_docs
+*.csv
