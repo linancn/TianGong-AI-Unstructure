@@ -13,6 +13,9 @@ from bs4 import BeautifulSoup
 from pinecone import Pinecone
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_fixed
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+import boto3
 
 
 load_dotenv()
@@ -27,6 +30,34 @@ logging.basicConfig(
 client = OpenAI()
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
+
+
+s3_client = boto3.client("s3")
+
+
+def list_all_objects(bucket_name, prefix):
+    paginator = s3_client.get_paginator("list_objects_v2")
+    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+
+    docs = []
+    for page in page_iterator:
+        if "Contents" in page:
+            for obj in page["Contents"]:
+                key = obj["Key"]
+                if key.endswith(".pkl"):
+                    docs.append(key)
+    return docs
+
+
+def load_pickle_from_s3(bucket_name, s3_key):
+    response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+    body = response["Body"].read()
+    data = pickle.loads(body)
+    return data
+
+
+bucket_name = "tiangong"
+prefix = "processed_docs/standards_pickle/"
 
 
 def num_tokens_from_string(string: str) -> int:
@@ -104,6 +135,7 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
+        d = d["text"]
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -152,7 +184,7 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, title, standard_number, issuing_organization, effective_date FROM standards WHERE embedded_time IS NOT NULL "
+        "SELECT id, title, standard_number, issuing_organization, effective_date FROM standards WHERE embedded_time IS NULL"
     )
     records = cur.fetchall()
 
@@ -162,21 +194,18 @@ standard_numbers = {record[0]: record[2] for record in records}
 organizations = {record[0]: record[3] for record in records}
 effective_dates = {record[0]: record[4] for record in records}
 
-files = [str(id) + ".pkl" for id in ids]
-
-dir = "processed_docs/standards_pickle"
+keys = [str(id) + ".pkl" for id in ids]
 
 update_data = []
 
-for file in files:
+for key in keys:
     try:
-        file_path = os.path.join(dir, file)
-        data = load_pickle_list(file_path)
+        data = load_pickle_from_s3(bucket_name, prefix + key)
         data = merge_pickle_list(data)
         data = fix_utf8(data)
         embeddings = get_embeddings(data)
 
-        file_id = file.split(".")[0]
+        file_id = key.split(".")[0]
         title = titles[file_id]
         standard_number = standard_numbers[file_id]
         organization = "，".join(organizations[file_id])

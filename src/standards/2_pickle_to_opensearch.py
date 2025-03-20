@@ -15,7 +15,7 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 load_dotenv()
 
 logging.basicConfig(
-    filename="standard_opensearch_aws.log",
+    filename="standard_opensearch.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
@@ -151,6 +151,7 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
+        d = d["text"]
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -189,7 +190,7 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, title, standard_number, issuing_organization, effective_date FROM standards WHERE embedded_time IS NOT NULL"
+        "SELECT id, title, standard_number, issuing_organization, effective_date FROM standards WHERE unstructure_time IS NULL"
     )
     records = cur.fetchall()
 

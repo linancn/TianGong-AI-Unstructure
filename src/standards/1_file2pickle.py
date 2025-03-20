@@ -123,4 +123,4 @@ def process_documents():
 # Run the document processing function
 if __name__ == "__main__":
     process_documents()
-    # conn_pg.close()
+    conn_pg.close()

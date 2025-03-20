@@ -170,8 +170,8 @@ nohup .venv/bin/python3.12 src/reports/2_embedding_init.py > log.txt 2>&1 &
 nohup .venv/bin/python3.12 src/education/4_pickle_to_pinecone.py > log.txt 2>&1 &
 
 ##standards
-nohup .venv/bin/python3.12 src/standards/3_pickle_to_pinecone.py &
-nohup .venv/bin/python3 src/standards/3_pickle_to_opensearch_aws.py > standard_opensearch_aws_log.txt 2>&1 &
+nohup .venv/bin/python3 src/standards/2_pickle_to_opensearch.py > standard_opensearch_log.txt 2>&1 &
+nohup .venv/bin/python3 src/standards/3_pickle_to_pinecone.py > standard_pinecone_log.txt 2>&1 &
 
 ##reports
 nohup .venv/bin/python3.12 src/reports/3_pickle_to_pinecone.py &
