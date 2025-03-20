@@ -24,9 +24,9 @@ def unstructure_by_service(doc_path, url, token):
 # 调用函数
 
 
-dir_path = 'test/edu_new'
+dir_path = 'test'
 
-pdf_url = 'http://localhost:8770/pdf'
+pdf_url = 'http://localhost:8770/omniai'
 docx_url = 'http://localhost:8770/docx'
 ppt_url = 'http://localhost:8770/ppt'
 
