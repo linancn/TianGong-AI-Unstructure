@@ -179,3 +179,4 @@ esg_meta_txt/
 nohup.out
 processed_docs
 *.csv
+logs/
