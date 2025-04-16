@@ -185,6 +185,7 @@ pkill -f src/reports/3_pickle_to_opensearch_aws.py
 nohup .venv/bin/python3.12 src/esg/3_pickle_to_opensearch.py > esg_opensearch_log.txt 2>&1 &
 nohup .venv/bin/python3.12 src/esg/3_pickle_to_pinecone.py > esg_pinecone_log.txt 2>&1 &
 nohup .venv/bin/python3 src/esg/3_pickle_to_opensearch_aws.py > esg_opensearch_aws_log.txt 2>&1 &
+nohup .venv/bin/python3 src/esg/3_pickle_to_pinecone_aws.py > esg_pinecone_aws_log.txt 2>&1 &
 
 pkill -f src/esg/3_pickle_to_pinecone.py
 pkill -f src/esg/3_pickle_to_opensearch.py

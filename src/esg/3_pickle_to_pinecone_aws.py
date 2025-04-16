@@ -9,27 +9,30 @@ import tiktoken
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import boto3
-from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
-
+from tenacity import retry, stop_after_attempt, wait_fixed
+from openai import OpenAI
+from pinecone import Pinecone
 
 load_dotenv()
 
 logging.basicConfig(
-    filename="esg_opensearch_aws.log",
+    filename="esg_pinecone.log",
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
     filemode="w",
     force=True,
 )
 
-host = os.environ.get("AWS_OPENSEARCH_URL")
 region = "us-east-1"
 
 service = "aoss"
 credentials = boto3.Session().get_credentials()
-auth = AWSV4SignerAuth(credentials, region, service)
 
 s3_client = boto3.client("s3")
+
+client = OpenAI()
+pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
+idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
 
 
 def list_all_objects(bucket_name, prefix):
@@ -57,49 +60,6 @@ bucket_name = "tiangong"
 prefix = "processed_docs/esg_pickle/"
 
 # docs = list_all_objects(bucket_name, prefix)
-
-client = OpenSearch(
-    hosts=[{"host": host, "port": 443}],
-    http_auth=auth,
-    use_ssl=True,
-    verify_certs=True,
-    connection_class=RequestsHttpConnection,
-    pool_maxsize=20,
-    timeout=300,
-)
-
-# Create the index
-esg_mapping = {
-    "settings": {"analysis": {"analyzer": {"smartcn": {"type": "smartcn"}}}},
-    "mappings": {
-        "properties": {
-            "rec_id": {"type": "keyword"},
-            "page_number": {"type": "keyword"},
-            "text": {
-                "type": "text",
-                "analyzer": "smartcn",
-            },
-            "title": {
-                "type": "text",
-                "analyzer": "smartcn",
-            },
-            "company_name": {
-                "type": "text",
-                "analyzer": "smartcn",
-            },
-            "country": {"type": "keyword"},
-            "category": {"type": "keyword"},
-            "publication_date": {"type": "date", "format": "epoch_second"},
-            "report_start_date": {"type": "date", "format": "epoch_second"},
-            "report_end_date": {"type": "date", "format": "epoch_second"},
-        },
-    },
-}
-
-if not client.indices.exists(index="esg"):
-    print("Creating 'esg' index...")
-    client.indices.create(index="esg", body=esg_mapping)
-
 
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -183,6 +143,34 @@ def merge_pickle_list(data):
     return result
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def get_embeddings(items, model="text-embedding-3-small"):
+    text_list = [item[0] for item in items]
+    try:
+        text_list = [text.replace("\n\n", " ").replace("\n", " ") for text in text_list]
+        length = len(text_list)
+        results = []
+
+        for i in range(0, length, 1000):
+            result = client.embeddings.create(
+                input=text_list[i : i + 1000], model=model
+            ).data
+            results += result
+        return results
+
+    except Exception as e:
+        print(e)
+
+
+@retry(wait=wait_fixed(3), stop=stop_after_attempt(10))
+def upsert_vectors(vectors):
+    try:
+        idx.upsert(
+            vectors=vectors, batch_size=200, namespace="esg", show_progress=False
+        )
+    except Exception as e:
+        logging.error(e)
+
 conn_pg = psycopg2.connect(
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
@@ -193,7 +181,7 @@ conn_pg = psycopg2.connect(
 
 with conn_pg.cursor() as cur:
     cur.execute(
-        "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date FROM esg_meta WHERE created_time > '2025-04-06' AND unstructure_time IS NOT NULL"
+        "SELECT id, country, company_name, report_title, publication_date, report_start_date, report_end_date FROM esg_meta WHERE created_time > '2025-04-07' AND unstructure_time is NOT null"
     )
     records = cur.fetchall()
 
@@ -204,63 +192,55 @@ report_titles = {record[0]: record[3] for record in records}
 publication_dates = {record[0]: record[4] for record in records}
 report_start_dates = {record[0]: record[5] for record in records}
 report_end_dates = {record[0]: record[6] for record in records}
-# categories = {record[0]: record[7] for record in records}
 
 keys = [str(id) + ".pkl" for id in ids]
 
 for key in keys:
+    file_id = key.split(".")[0]
     try:
         data = load_pickle_from_s3(bucket_name, prefix + key)
         data = merge_pickle_list(data)
         data = fix_utf8(data)
-    except Exception as e:
-        logging.error(f"Error loading or merging data for {key}: {e}")
-        continue
+        embeddings = get_embeddings(data)
 
-    file_id = key.split(".")[0]
-    title = report_titles[file_id]
-    country = countries[file_id]
-    company = company_names[file_id]
-    publication_date = int(publication_dates[file_id].timestamp())
-    report_start_date = int(report_start_dates[file_id].timestamp())
-    report_end_date = int(report_end_dates[file_id].timestamp())
-    # category = categories[file_id]
+        title = report_titles[file_id]
+        country = countries[file_id]
+        company = company_names[file_id]
+        publication_date = int(publication_dates[file_id].timestamp())
+        report_start_date = int(report_start_dates[file_id].timestamp())
+        report_end_date = int(report_end_dates[file_id].timestamp())
 
-    fulltext_list = []
-    for index, d in enumerate(data):
-        fulltext_list.append(
-            {"index": {"_index": "esg", "_id": file_id + "_" + str(index)}}
-        )
-        fulltext_list.append(
-            {
-                "text": data[index][0],
-                "rec_id": file_id,
-                "page_number": data[index][1],
-                "title": title,
-                "country": country,
-                "company_name": company,
-                "publication_date": publication_date,
-                "report_start_date": report_start_date,
-                "report_end_date": report_end_date,
-                # "category": category,
-            }
-        )
-    n = len(fulltext_list)
-    try:
-        for i in range(0, n, 500):
-            batch = fulltext_list[i : i + 500]
-            client.bulk(body=batch)
+        vectors = []
+        for index, e in enumerate(embeddings):
+            vectors.append(
+                {
+                    "id": file_id + "_" + str(index),
+                    "values": e.embedding,
+                    "metadata": {
+                        "text": data[index][0],
+                        "rec_id": file_id,
+                        "page_number": data[index][1],
+                        "title": title,
+                        "country": country,
+                        "company_name": company,
+                        "publication_date": publication_date,
+                        "report_start_date": report_start_date,
+                        "report_end_date": report_end_date,
+                    },
+                }
+            )
 
+        upsert_vectors(vectors)
         with conn_pg.cursor() as cur:
             cur.execute(
-                "UPDATE esg_meta SET fulltext_time = %s WHERE id = %s",
+                "UPDATE esg_meta SET embedded_time = %s WHERE id = %s",
                 (datetime.now(UTC), file_id),
             )
             conn_pg.commit()
 
-        logging.info(f"Fulltext indexed for {file_id}")
+        logging.info(f"Embedding indexed for {file_id}")
 
     except Exception as e:
-        logging.error(f"Error indexing fulltext for {file_id}: {e}")
+        logging.error(f"Error indexing embedding for {file_id}: {e}")
 
 conn_pg.close()
