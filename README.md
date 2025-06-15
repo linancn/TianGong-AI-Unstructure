@@ -225,4 +225,7 @@ nohup .venv/bin/python3.12 src/education/0_pdf_pickle_service_2.py 2>&1 &
 nohup .venv/bin/python3 src/standards/1_file2pickle.py > standard_pickle_log.txt 2>&1 &
 
 nohup .venv/bin/python3 src/esg/1_file2pickle.py > esg_pickle_log.txt 2>&1 &
+
+nohup .venv/bin/python3 src/ali/3_pickle_to_opensearch.py > epr_log.txt 2>&1 &
+nohup .venv/bin/python3 src/ali/3_pickle_to_pinecone.py > epr_log_pinecone.txt 2>&1 &
 ```
