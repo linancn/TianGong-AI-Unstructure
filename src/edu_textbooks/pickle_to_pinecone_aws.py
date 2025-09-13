@@ -54,6 +54,7 @@ bucket_name = "tiangong"
 prefix = "processed_docs/edu_textbooks_pickle/"
 suffix = ".pkl"
 
+
 def to_unix_timestamp(date_str: str) -> int:
     try:
         # Parse the date string using arrow
@@ -157,8 +158,6 @@ def merge_pickle_list(data):
     return result
 
 
-
-
 conn_pool = pool.SimpleConnectionPool(
     1,
     20,  # min and max number of connections
@@ -217,7 +216,10 @@ for file in files:
             )
         try:
             idx.upsert(
-                vectors=vectors, batch_size=100, namespace="textbook", show_progress=False
+                vectors=vectors,
+                batch_size=100,
+                namespace="textbook",
+                show_progress=False,
             )
 
             # Get a connection from the pool

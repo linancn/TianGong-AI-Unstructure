@@ -8,6 +8,7 @@ from tools.unstructure_pdf import unstructure_pdf
 
 load_dotenv()
 
+
 def process_pdf(file_path):
     record_id = os.path.splitext(os.path.basename(file_path))[0]
 
@@ -20,6 +21,7 @@ def process_pdf(file_path):
 
     with open("txt/" + record_id + ".txt", "w") as f:
         f.write(text_str)
+
 
 directory = "test"
 pdf_files = glob.glob(os.path.join(directory, "*.pdf"))

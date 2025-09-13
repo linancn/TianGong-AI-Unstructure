@@ -5,12 +5,12 @@ import pickle
 
 
 # 创建自定义的日志记录器
-logger = logging.getLogger('journal_processor')
+logger = logging.getLogger("journal_processor")
 logger.setLevel(logging.INFO)
 
 # 创建文件处理器并设置格式
-fh = logging.FileHandler('journal_pinecone_2.log', mode='w')
-formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(message)s')
+fh = logging.FileHandler("journal_pinecone_2.log", mode="w")
+formatter = logging.Formatter("%(asctime)s:%(levelname)s:%(message)s")
 fh.setFormatter(formatter)
 
 # 将处理器添加到日志记录器
@@ -33,12 +33,14 @@ with open("journal_pdf_list_2.pkl", "rb") as f:
 
 # pdf_lists.reverse()
 
+
 def safe_sci_chunk(pdf_list):
     try:
         return sci_chunk(pdf_list)
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         return None
+
 
 for pdf_list in pdf_lists:
     pdf_path = pdf_list["pdf_path"]

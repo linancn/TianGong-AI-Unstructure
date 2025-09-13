@@ -18,16 +18,16 @@ load_dotenv()
 pickle_dir = "docs/processed_docs/standards_pickle"
 file_ids = []
 for file in os.listdir(pickle_dir):
-    if file.endswith('.pkl'):
-        file_id = file.split('.')[0]  # Extract id from filename
+    if file.endswith(".pkl"):
+        file_id = file.split(".")[0]  # Extract id from filename
         file_ids.append(file_id)
 
 logging.info(f"Found {len(file_ids)} IDs from pickle files")
 
 
-
 conn_pool = pool.SimpleConnectionPool(
-    1, 20,  # min and max number of connections
+    1,
+    20,  # min and max number of connections
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),
@@ -54,18 +54,19 @@ logging.info(f"Found {len(overlapping_ids)} overlapping IDs")
 # Update unstructure_time for overlapping IDs
 batch_size = 10
 for i in range(0, len(overlapping_ids), batch_size):
-    batch_ids = overlapping_ids[i:i+batch_size]
+    batch_ids = overlapping_ids[i : i + batch_size]
     conn_pg = conn_pool.getconn()
     try:
         with conn_pg.cursor() as cur:
             # Create batch of update parameters
             args = [(datetime.now(UTC), file_id) for file_id in batch_ids]
             cur.executemany(
-                "UPDATE standards SET unstructure_time = %s WHERE id = %s",
-                args
+                "UPDATE standards SET unstructure_time = %s WHERE id = %s", args
             )
             conn_pg.commit()
-            logging.info(f"Updated unstructure_time for batch {i//batch_size + 1} ({len(batch_ids)} records)")
+            logging.info(
+                f"Updated unstructure_time for batch {i//batch_size + 1} ({len(batch_ids)} records)"
+            )
     except Exception as e:
         logging.error(f"Error updating batch {i//batch_size + 1}: {e}")
     finally:

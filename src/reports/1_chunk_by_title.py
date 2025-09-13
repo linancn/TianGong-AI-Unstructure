@@ -67,7 +67,9 @@ def process_pdf(record):
     with open("reports_pickle/" + record_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)
 
-    text_str_list = ["Page {}: {}".format(page_number, text) for text, page_number in text_list]
+    text_str_list = [
+        "Page {}: {}".format(page_number, text) for text, page_number in text_list
+    ]
 
     text_str = "\n----------\n".join(text_str_list)
 

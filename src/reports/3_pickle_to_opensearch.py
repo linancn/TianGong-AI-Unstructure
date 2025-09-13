@@ -51,7 +51,7 @@ reports_mapping = {
                 "search_analyzer": "ik_smart",
             },
             "release_date": {"type": "date", "format": "epoch_second"},
-            "url":{"type": "text"}
+            "url": {"type": "text"},
         },
     },
 }

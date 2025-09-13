@@ -45,6 +45,7 @@ with conn_pg.cursor() as cur:
     )
     records = cur.fetchall()
 
+
 def unstructure_by_service(doc_id, doc_path, token, url):
     """Process document through the appropriate unstructure service"""
     with open(doc_path, "rb") as f:

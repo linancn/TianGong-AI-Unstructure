@@ -227,19 +227,21 @@ def sci_chunk(pdf_list, vision=False):
                 },
             }
         )
-    
+
     try:
-        idx.upsert(vectors=vectors, batch_size=100, namespace="sci", show_progress=False)
+        idx.upsert(
+            vectors=vectors, batch_size=100, namespace="sci", show_progress=False
+        )
 
         with open(pickle_path, "wb") as f:
             pickle.dump(data, f)
-        
+
         conn_pg = psycopg2.connect(
-        database=os.getenv("POSTGRES_DB"),
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-        host=os.getenv("POSTGRES_HOST"),
-        port=os.getenv("POSTGRES_PORT"),
+            database=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            host=os.getenv("POSTGRES_HOST"),
+            port=os.getenv("POSTGRES_PORT"),
         )
         try:
             with conn_pg.cursor() as cur:

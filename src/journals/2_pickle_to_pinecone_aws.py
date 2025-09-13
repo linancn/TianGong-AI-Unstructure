@@ -113,6 +113,7 @@ def convert_pdf_to_pickle_path(pdf_path):
 # with open(f"docs_intersection_Oct31.pkl", "rb") as f:
 #     docs_intersection = pickle.load(f)
 
+
 def to_unix_timestamp(date_str: str) -> int:
     try:
         # Parse the date string using arrow
@@ -145,8 +146,8 @@ def get_embeddings(text_list, model="text-embedding-3-small"):
         results = []
         for i in range(0, length, 1000):
             result = client.embeddings.create(
-                    input=text_list[i : i + 1000], model=model
-                ).data
+                input=text_list[i : i + 1000], model=model
+            ).data
             results += result
         return results
     except Exception as e:
@@ -253,7 +254,7 @@ conn_pool = pool.SimpleConnectionPool(
 with conn_pool.getconn() as conn_pg:
     with conn_pg.cursor() as cur:
         cur.execute(
-            """SELECT id, doi, journal, date FROM journals WHERE upload_time IS NOT NULL AND embedding_time < '2024-10-22T00:00:00+00:00'""" # 改为embedding_time早于XXX
+            """SELECT id, doi, journal, date FROM journals WHERE upload_time IS NOT NULL AND embedding_time < '2024-10-22T00:00:00+00:00'"""  # 改为embedding_time早于XXX
         )
         records = cur.fetchall()
 

@@ -14,11 +14,11 @@ logging.basicConfig(
 )
 
 
-#读取csv文件
-df = pd.read_csv('journal_doi_id.csv', header=None, names=['id', 'doi'])
+# 读取csv文件
+df = pd.read_csv("journal_doi_id.csv", header=None, names=["id", "doi"])
 
-df = df.astype({'id': 'str', 'doi': 'str'})
-df.set_index('doi', inplace=True)
+df = df.astype({"id": "str", "doi": "str"})
+df.set_index("doi", inplace=True)
 
 base_dir = "processed_docs/journal_pickle/"
 left_len = len(base_dir)
@@ -31,7 +31,7 @@ for root, _, files in os.walk(base_dir):
         decoded_path = unquote(unquote(file_path))
         doi = decoded_path[left_len:-right_len]
 
-        new_name = df.loc[doi, 'id']
+        new_name = df.loc[doi, "id"]
         try:
             new_path = os.path.join(base_dir, f"{new_name}.pkl")
             # 复制并重命名
@@ -39,5 +39,3 @@ for root, _, files in os.walk(base_dir):
             logging.info(f"{doi} renamed to {new_name}.pkl.")
         except Exception as e:
             logging.error(f"{doi} failed to rename: {e}")
-
-        

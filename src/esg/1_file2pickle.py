@@ -47,16 +47,17 @@ with conn_pg.cursor() as cur:
     )
     records = cur.fetchall()
 
+
 def unstructure_by_service(doc_id, doc_path, token, url):
     """Process document through the appropriate unstructure service"""
     pickle_filename = f"{doc_id}.pkl"
     pickle_path = os.path.join(output_dir, pickle_filename)
-    
+
     # Check if pickle file already exists
     if os.path.exists(pickle_path):
         logging.info(f"Pickle file already exists for document ID: {doc_id}, skipping.")
         return doc_id
-    
+
     with open(doc_path, "rb") as f:
         files = {"file": f}
         headers = {"Authorization": f"Bearer {token}"}
@@ -81,6 +82,7 @@ def unstructure_by_service(doc_id, doc_path, token, url):
                 f"Error processing document ID: {doc_id} with service {url}: {str(e)}"
             )
             return None
+
 
 def process_documents():
     """Process documents distributing them across available services"""

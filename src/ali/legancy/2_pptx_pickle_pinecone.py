@@ -134,11 +134,15 @@ def merge_pickle_list(data):
 def upsert_vectors(vectors):
     try:
         idx.upsert(
-            vectors=vectors, batch_size=200, namespace="internal_use", show_progress=False
+            vectors=vectors,
+            batch_size=200,
+            namespace="internal_use",
+            show_progress=False,
         )
     except Exception as e:
         logging.error(f"Error upserting vectors: {e}")
         raise
+
 
 conn_pg = psycopg2.connect(
     database=os.getenv("POSTGRES_DB"),
@@ -149,9 +153,7 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute(
-        "SELECT id, title, tag FROM internal_use WHERE file_type = '.pptx'"
-    )
+    cur.execute("SELECT id, title, tag FROM internal_use WHERE file_type = '.pptx'")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
@@ -190,18 +192,16 @@ for file in files:
 
     upsert_vectors(vectors)
     with conn_pg.cursor() as cur:
-            cur.execute(
-                "UPDATE internal_use SET embedded_time = %s WHERE id = %s",
-                (datetime.now(UTC), file_id),
-            )
-            conn_pg.commit()
+        cur.execute(
+            "UPDATE internal_use SET embedded_time = %s WHERE id = %s",
+            (datetime.now(UTC), file_id),
+        )
+        conn_pg.commit()
 
     # logging.info(f"{file_id} embedding finished")
 
 cur.close()
 conn_pg.close()
-
-
 
 
 # dir = "test/pickle"

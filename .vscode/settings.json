@@ -1,0 +1,10 @@
+{
+  "files.watcherExclude": {
+    "**/docs/**": true,
+    "**/processed_docs/**": true
+  },
+  "files.exclude": {
+    "**/docs/**": true,
+    "**/processed_docs/**": true
+  }
+}

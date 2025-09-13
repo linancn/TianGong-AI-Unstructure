@@ -61,6 +61,7 @@ prefix = "processed_docs/esg_pickle/"
 
 # docs = list_all_objects(bucket_name, prefix)
 
+
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding("cl100k_base")
@@ -170,6 +171,7 @@ def upsert_vectors(vectors):
         )
     except Exception as e:
         logging.error(e)
+
 
 conn_pg = psycopg2.connect(
     database=os.getenv("POSTGRES_DB"),

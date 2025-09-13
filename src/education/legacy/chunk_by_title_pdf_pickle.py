@@ -221,7 +221,7 @@ def merge_pickle_list(data):
             for table in tables:
                 table_content = str(table)
                 if num_tokens_from_string(table_content) < 8100:
-                    if table_content:  
+                    if table_content:
                         result.append(table_content)
                 else:
                     try:

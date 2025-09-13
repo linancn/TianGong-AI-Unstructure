@@ -10,6 +10,7 @@ with open("journal_pdf_list_0.pkl", "rb") as f:
 for pdf in pdf_list:
     sci_chunk(pdf)
 
+
 def safe_sci_chunk(pdf_list):
     try:
         return sci_chunk(pdf_list)

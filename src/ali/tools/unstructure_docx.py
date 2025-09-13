@@ -2,6 +2,7 @@ from unstructured.partition.docx import partition_docx
 from unstructured.chunking.title import chunk_by_title
 from unstructured.documents.elements import CompositeElement, Table
 
+
 def extract_text(file_name: str):
     elements = partition_docx(
         filename=file_name,

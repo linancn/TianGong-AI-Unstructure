@@ -183,7 +183,6 @@ for file in files:
     title = titles[file_id]
     tag = tags[file_id]
 
-
     fulltext_list = []
     for index, d in enumerate(data):
         fulltext_list.append(

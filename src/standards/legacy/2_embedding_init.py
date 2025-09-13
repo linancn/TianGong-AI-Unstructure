@@ -28,6 +28,7 @@ client = OpenAI()
 pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME"))
 
+
 def to_unix_timestamp(date_str: str) -> int:
     """
     Convert a date string to a unix timestamp (seconds since epoch).
@@ -48,6 +49,7 @@ def to_unix_timestamp(date_str: str) -> int:
         # If the parsing fails, return the current unix timestamp and log a warning
         return int(arrow.now().timestamp())
         # If the parsing fails, return the curr
+
 
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""

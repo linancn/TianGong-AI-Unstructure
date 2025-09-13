@@ -87,7 +87,7 @@ reports_mapping = {
                 "analyzer": "smartcn",
             },
             "release_date": {"type": "date", "format": "epoch_second"},
-            "url":{"type": "text"}
+            "url": {"type": "text"},
         },
     },
 }

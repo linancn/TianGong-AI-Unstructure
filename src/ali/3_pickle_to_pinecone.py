@@ -111,6 +111,7 @@ def merge_pickle_list(data):
 
     return result
 
+
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(items, model="text-embedding-3-small"):
     text_list = [item[0] for item in items]
@@ -134,7 +135,10 @@ def get_embeddings(items, model="text-embedding-3-small"):
 def upsert_vectors(vectors):
     try:
         idx.upsert(
-            vectors=vectors, batch_size=200, namespace="internal_use", show_progress=False
+            vectors=vectors,
+            batch_size=200,
+            namespace="internal_use",
+            show_progress=False,
         )
     except Exception as e:
         logging.error(e)
@@ -149,7 +153,7 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, title,tag FROM internal_use WHERE tag = 'epr'")
+    cur.execute("SELECT id, title,tag FROM internal_use WHERE tag = 'txtbook'")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
@@ -158,7 +162,7 @@ tags = {record[0]: record[2] for record in records}
 
 files = [str(id) + ".pkl" for id in ids]
 
-dir = "temp/epr"
+dir = "test"
 
 # update_data = []
 
@@ -167,9 +171,10 @@ for file in files:
     if not os.path.exists(os.path.join(dir, file)):
         logging.error(f"File {file} does not exist in directory {dir}. Skipping.")
         continue
-    
+
     try:
         data = load_pickle_list(file_path)
+        data = data[:-1]
         data = merge_pickle_list(data)
         data = fix_utf8(data)
         embeddings = get_embeddings(data)
@@ -177,7 +182,6 @@ for file in files:
         file_id = file.split(".")[0]
         title = titles[file_id]
         tag = tags[file_id]
-
 
         vectors = []
         for index, e in enumerate(embeddings):

@@ -89,7 +89,7 @@ def extract_doi_from_path(path):
 
 docs = list_all_objects(bucket_name, prefix)
 
-#写入pickle
+# 写入pickle
 with open("docs_s3.pkl", "wb") as f:
     pickle.dump(docs, f)
 
@@ -244,6 +244,7 @@ def get_files_before(directory, target_time):
                 old_files.add(relative_path)
     return old_files
 
+
 conn_pool = pool.SimpleConnectionPool(
     1,
     20,  # min and max number of connections
@@ -271,20 +272,18 @@ df = pd.DataFrame({"doi": docs_dois, "path": docs})
 
 for index, row in df.iterrows():
     try:
-        data = load_pickle_from_s3(bucket_name, row['path'])
+        data = load_pickle_from_s3(bucket_name, row["path"])
         data = merge_pickle_list(data)
         data = fix_utf8(data)
         embeddings = get_embeddings(data)
 
-        file_id = row['doi']
+        file_id = row["doi"]
         journal = journals[file_id]
         date = int(dates[file_id].timestamp())
 
         fulltext_list = []
         for index, d in enumerate(data):
-            fulltext_list.append(
-                {"index": {"_index": "edu"}}
-            )
+            fulltext_list.append({"index": {"_index": "edu"}})
             fulltext_list.append(
                 {
                     "text": data[index],

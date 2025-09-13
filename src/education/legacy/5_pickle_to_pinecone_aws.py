@@ -66,7 +66,6 @@ pc = Pinecone(api_key=os.environ.get("PINECONE_SERVERLESS_API_KEY_US_EAST_1"))
 idx = pc.Index(os.environ.get("PINECONE_SERVERLESS_INDEX_NAME_US_EAST_1"))
 
 
-
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding("cl100k_base")
@@ -121,7 +120,7 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        d = d['text']
+        d = d["text"]
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -149,6 +148,7 @@ def merge_pickle_list(data):
 
     return result
 
+
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def get_embeddings(text_list, model="text-embedding-3-small"):
     try:
@@ -166,6 +166,7 @@ def get_embeddings(text_list, model="text-embedding-3-small"):
     except Exception as e:
         logging.error(e)
 
+
 @retry(wait=wait_fixed(3), stop=stop_after_attempt(10))
 def upsert_vectors(vectors):
     try:
@@ -174,6 +175,7 @@ def upsert_vectors(vectors):
         )
     except Exception as e:
         logging.error(e)
+
 
 conn_pg = psycopg2.connect(
     database=os.getenv("POSTGRES_DB"),
@@ -184,7 +186,9 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL and embedding_time IS NULL")
+    cur.execute(
+        "SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL and embedding_time IS NULL"
+    )
     records = cur.fetchall()
 
 ids = [record[0] for record in records]
@@ -220,7 +224,6 @@ for key in keys:
                     "course": course,
                     "name": name,
                     "chapter_number": chapter_number,
-
                 },
             }
         )
@@ -239,13 +242,17 @@ chunk_size = 100
 
 
 with conn_pg.cursor() as cur:
-    total_chunks = len(update_data) // chunk_size + (1 if len(update_data) % chunk_size > 0 else 0)
+    total_chunks = len(update_data) // chunk_size + (
+        1 if len(update_data) % chunk_size > 0 else 0
+    )
     for i, chunk in enumerate(chunk_list(update_data, chunk_size), start=1):
         cur.executemany(
             "UPDATE edu_meta SET embedding_time = %s WHERE id = %s",
             chunk,
         )
         conn_pg.commit()
-        logging.info(f"Updated chunk {i}/{total_chunks}, {len(chunk)} records in this chunk.")
+        logging.info(
+            f"Updated chunk {i}/{total_chunks}, {len(chunk)} records in this chunk."
+        )
 
 conn_pg.close()

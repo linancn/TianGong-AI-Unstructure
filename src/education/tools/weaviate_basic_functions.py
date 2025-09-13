@@ -69,7 +69,9 @@ from docx import Document
 # doc.save("output.docx")
 ## Delete all the objects in the weaviate  ##
 w_client = weaviate.connect_to_local(
-    host="localhost", port=8088,  additional_config=AdditionalConfig(timeout=(60000, 80000))
+    host="localhost",
+    port=8088,
+    additional_config=AdditionalConfig(timeout=(60000, 80000)),
 )
 w_client.collections.delete(name="Education")
 w_client.close()

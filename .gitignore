@@ -180,3 +180,4 @@ nohup.out
 processed_docs
 *.csv
 logs/
+*.txt

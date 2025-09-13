@@ -149,7 +149,7 @@ def merge_pickle_list(data):
     temp = ""
     result = []
     for d in data:
-        d = d['text']
+        d = d["text"]
         if num_tokens_from_string(d) > 8100:
             soup = BeautifulSoup(d, "html.parser")
             tables = soup.find_all("table")
@@ -187,7 +187,9 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL and fulltext_time IS NULL")
+    cur.execute(
+        "SELECT id, course, file_type, name, chapter_number FROM edu_meta WHERE upload_time IS NOT NULL and fulltext_time IS NULL"
+    )
     records = cur.fetchall()
 
 ids = [record[0] for record in records]

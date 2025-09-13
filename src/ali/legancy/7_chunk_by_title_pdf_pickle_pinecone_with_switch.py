@@ -245,76 +245,66 @@ files_without_extension = [
 ]
 
 for file_without_extension in files_without_extension:
-        record_id = file_without_extension
+    record_id = file_without_extension
 
-        file_path = os.path.join(
-            dir, file_without_extension + file_extension_to_remove
-        )
+    file_path = os.path.join(dir, file_without_extension + file_extension_to_remove)
 
-        data = load_pickle_list(file_path)
+    data = load_pickle_list(file_path)
 
+    if include_page_numbers:
+        data = merge_pickle_list_with_page_numbers(data)
+    else:
+        data = merge_pickle_list_without_page_numbers(data)
+
+    data = fix_utf8(data)
+
+    embeddings = get_embeddings(data)
+
+    vectors = []
+    fulltext_list = []
+    for index, e in enumerate(embeddings):
         if include_page_numbers:
-            data = merge_pickle_list_with_page_numbers(data)
+            page_info = (
+                data[index][2]
+                if isinstance(data[index], tuple) and len(data[index]) == 3
+                else None
+            )
+            text_with_page = (
+                f"Page {page_info}: {data[index][1]}"
+                if page_info
+                else (data[index][1] if isinstance(data[index], tuple) else data[index])
+            )
         else:
-            data = merge_pickle_list_without_page_numbers(data)
-
-        data = fix_utf8(data)
-
-        embeddings = get_embeddings(data)
-
-        vectors = []
-        fulltext_list = []
-        for index, e in enumerate(embeddings):
-            if include_page_numbers:
-                page_info = (
-                    data[index][2]
-                    if isinstance(data[index], tuple) and len(data[index]) == 3
-                    else None
-                )
-                text_with_page = (
-                    f"Page {page_info}: {data[index][1]}"
-                    if page_info
-                    else (
-                        data[index][1]
-                        if isinstance(data[index], tuple)
-                        else data[index]
-                    )
-                )
-            else:
-                text_with_page = (
-                    data[index][1]
-                    if isinstance(data[index], tuple)
-                    else data[index]
-                )
-
-            if text_with_page.strip() == "":  # Skip empty texts
-                continue
-
-            vectors.append(
-                {
-                    "id": uuid.uuid4().hex,
-                    "values": e.embedding,
-                    "metadata": {
-                        "text": text_with_page,
-                        "title": record_id,
-                    },
-                }
+            text_with_page = (
+                data[index][1] if isinstance(data[index], tuple) else data[index]
             )
 
-            fulltext_list.append(
-                {
+        if text_with_page.strip() == "":  # Skip empty texts
+            continue
+
+        vectors.append(
+            {
+                "id": uuid.uuid4().hex,
+                "values": e.embedding,
+                "metadata": {
                     "text": text_with_page,
                     "title": record_id,
-                }
-            )
-            
+                },
+            }
+        )
 
-        upsert_vectors(vectors)
+        fulltext_list.append(
+            {
+                "text": text_with_page,
+                "title": record_id,
+            }
+        )
 
-        n = len(fulltext_list)
-        for i in range(0, n, 500):
-            batch = fulltext_list[i : i + 500]
-            result = xata.records().bulk_insert("fulltext", {"records": batch})
+    upsert_vectors(vectors)
 
-        logging.info(f"Embedding finished for file_id: {record_id}")
+    n = len(fulltext_list)
+    for i in range(0, n, 500):
+        batch = fulltext_list[i : i + 500]
+        result = xata.records().bulk_insert("fulltext", {"records": batch})
 
+    logging.info(f"Embedding finished for file_id: {record_id}")

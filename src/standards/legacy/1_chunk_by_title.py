@@ -33,6 +33,7 @@ def process_pdf(record):
     with open("temp/" + record + ".txt", "w") as f:
         f.write(text_str)
 
+
 # 从数据库获取的id
 db_ids = {row[0] for row in rows}
 

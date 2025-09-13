@@ -63,7 +63,9 @@ conn_pg = psycopg2.connect(
 )
 
 with conn_pg.cursor() as cur:
-    cur.execute("SELECT id, language FROM esg_meta WHERE embedded_time IS NULL AND language IS NOT NULL")
+    cur.execute(
+        "SELECT id, language FROM esg_meta WHERE embedded_time IS NULL AND language IS NOT NULL"
+    )
     records = cur.fetchall()
 
 

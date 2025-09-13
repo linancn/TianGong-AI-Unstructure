@@ -7,7 +7,7 @@ from tools.unstructure_pdf import unstructure_pdf
 load_dotenv()
 
 
-#读取pickle文件
+# 读取pickle文件
 with open("chunk_0.pkl", "rb") as f:
     records = pickle.load(f)
 

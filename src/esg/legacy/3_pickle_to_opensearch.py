@@ -159,7 +159,8 @@ def merge_pickle_list(data):
 
 
 conn_pool = pool.SimpleConnectionPool(
-    1, 20,  # min and max number of connections
+    1,
+    20,  # min and max number of connections
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),
@@ -243,7 +244,7 @@ for file in files:
             # Release the connection back to the pool
             conn_pool.putconn(conn_pg)
 
-    except Exception :
+    except Exception:
         logging.error(f"Error processing pickle file: {file}")
 # Close the connection pool
 conn_pool.closeall()

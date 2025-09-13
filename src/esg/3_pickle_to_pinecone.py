@@ -143,7 +143,8 @@ def upsert_vectors(vectors):
 
 
 conn_pool = pool.SimpleConnectionPool(
-    1, 20,  # min and max number of connections
+    1,
+    20,  # min and max number of connections
     database=os.getenv("POSTGRES_DB"),
     user=os.getenv("POSTGRES_USER"),
     password=os.getenv("POSTGRES_PASSWORD"),

@@ -11,7 +11,6 @@ from tools.unstructure_pdf_pages import unstructure_pdf
 load_dotenv()
 
 
-
 # conn_pg = psycopg2.connect(
 #     database=os.getenv("POSTGRES_DB"),
 #     user=os.getenv("POSTGRES_USER"),
@@ -34,6 +33,7 @@ id = [file[:-4] for file in files]
 # ids = [record["id"] for record in records]
 # print(ids)
 
+
 def split_pdf_first_three_pages(input_pdf_path):
     pdf_reader = PyPDF2.PdfReader(input_pdf_path)
     pdf_writer = PyPDF2.PdfWriter()
@@ -44,6 +44,7 @@ def split_pdf_first_three_pages(input_pdf_path):
     output_pdf_io.seek(0)
     return output_pdf_io
 
+
 def process_pdf(file_id):
     # record_id = record[0]
     # if record[1] == "eng":
@@ -52,9 +53,7 @@ def process_pdf(file_id):
     #     language = [record[1], "eng"]
     pdf_io = split_pdf_first_three_pages("esg_temp/" + file_id + ".pdf")
 
-    text_list = unstructure_pdf(
-        pdf_io=pdf_io
-    )
+    text_list = unstructure_pdf(pdf_io=pdf_io)
 
     with open("esg_meta_pickle/" + file_id + ".pkl", "wb") as f:
         pickle.dump(text_list, f)

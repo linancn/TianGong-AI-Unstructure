@@ -49,8 +49,8 @@ def extract_text(file_name: str):
             title, content = split_text
         else:
             title = text
-            content = ""  
-        result_list.append((title, content))  
+            content = ""
+        result_list.append((title, content))
     return result_list
 
 
@@ -65,6 +65,7 @@ def split_chunks(text_list: list, source: str):
         chunks.append({"title": title, "content": content, "source": source})
     return chunks
 
+
 def process_docx(file_path):
     file_name_without_ext = os.path.splitext(os.path.basename(file_path))[0]
     contents = extract_text(file_path)
@@ -72,6 +73,7 @@ def process_docx(file_path):
     water_collection = w_client.collections.get(name="Water_docx")
     for chunk in w_chunks:
         water_collection.data.insert(chunk)
+
 
 w_client = weaviate.connect_to_local(
     host="localhost", additional_config=AdditionalConfig(timeout=(600, 800))

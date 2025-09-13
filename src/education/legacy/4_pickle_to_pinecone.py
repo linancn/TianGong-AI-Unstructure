@@ -192,7 +192,6 @@ for file in files:
                     "course": course,
                     "name": name,
                     "chapter_number": chapter_number,
-
                 },
             }
         )
@@ -210,13 +209,17 @@ def chunk_list(data, chunk_size):
 chunk_size = 100
 
 with conn_pg.cursor() as cur:
-    total_chunks = len(update_data) // chunk_size + (1 if len(update_data) % chunk_size > 0 else 0)
+    total_chunks = len(update_data) // chunk_size + (
+        1 if len(update_data) % chunk_size > 0 else 0
+    )
     for i, chunk in enumerate(chunk_list(update_data, chunk_size), start=1):
         cur.executemany(
             "UPDATE edu_meta SET embedding_time = %s WHERE id = %s",
             chunk,
         )
         conn_pg.commit()
-        logging.info(f"Updated chunk {i}/{total_chunks}, {len(chunk)} records in this chunk.")
+        logging.info(
+            f"Updated chunk {i}/{total_chunks}, {len(chunk)} records in this chunk."
+        )
 
 conn_pg.close()

@@ -136,7 +136,10 @@ def merge_pickle_list(data):
 def upsert_vectors(vectors):
     try:
         idx.upsert(
-            vectors=vectors, batch_size=200, namespace="internal_use", show_progress=False
+            vectors=vectors,
+            batch_size=200,
+            namespace="internal_use",
+            show_progress=False,
         )
     except Exception as e:
         logging.error(e)
@@ -152,9 +155,7 @@ conn_pg = psycopg2.connect(
 
 
 with conn_pg.cursor() as cur:
-    cur.execute(
-        "SELECT id, title, tag FROM internal_use WHERE file_type = '.pdf'"
-    )
+    cur.execute("SELECT id, title, tag FROM internal_use WHERE file_type = '.pdf'")
     records = cur.fetchall()
 
 ids = [record[0] for record in records]

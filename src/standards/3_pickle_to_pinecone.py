@@ -230,11 +230,11 @@ for key in keys:
 
         upsert_vectors(vectors)
         with conn_pg.cursor() as cur:
-                cur.execute(
-                    "UPDATE standards SET embedded_time = %s WHERE id = %s",
-                    (datetime.now(UTC), file_id),
-                )
-                conn_pg.commit()
+            cur.execute(
+                "UPDATE standards SET embedded_time = %s WHERE id = %s",
+                (datetime.now(UTC), file_id),
+            )
+            conn_pg.commit()
 
         logging.info(f"{file_id} embedding finished")
 

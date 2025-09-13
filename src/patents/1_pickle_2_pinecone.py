@@ -28,11 +28,13 @@ auth = AWSV4SignerAuth(credentials, region, service)
 
 s3_client = boto3.client("s3")
 
+
 def load_pickle_from_s3(bucket_name, s3_key):
     response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
     body = response["Body"].read()
     data = pickle.loads(body)
     return data
+
 
 bucket_name = "tiangong"
 

@@ -10,6 +10,7 @@ import weaviate.classes as wvc
 from dotenv import load_dotenv
 from weaviate.config import AdditionalConfig
 from weaviate.classes.config import Configure, DataType, Property
+
 # from tiktoken import TokenCounts
 
 load_dotenv()
@@ -20,6 +21,7 @@ def load_pickle_list(file_path):
         data = pickle.load(f)
     return data
 
+
 # def num_tokens_from_string(string: str) -> int:
 #     """Returns the number of tokens in a text string."""
 #     token_counts = TokenCounts()
@@ -27,6 +29,7 @@ def load_pickle_list(file_path):
 #         string = str(string)
 #     num_tokens = len(token_counts.count_tokens(string))
 #     return num_tokens
+
 
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""

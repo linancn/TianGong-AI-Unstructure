@@ -1,6 +1,7 @@
 from pptx import Presentation
 from unstructured.partition.pptx import partition_pptx
 
+
 def extract_text(file_name: str):
     prs = Presentation(file_name)
     elements = partition_pptx(

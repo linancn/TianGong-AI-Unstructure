@@ -97,7 +97,7 @@ for i, row in df.iterrows():
             "publication_date": int(row["publication_date"]),
         }
     )
-    if len(fulltext_list) >= 1000: 
+    if len(fulltext_list) >= 1000:
         client.bulk(body=fulltext_list)
         fulltext_list = []
         bulk_count += 1
@@ -105,4 +105,3 @@ for i, row in df.iterrows():
 
 if fulltext_list:
     client.bulk(body=fulltext_list)
-

@@ -4,7 +4,13 @@ from unstructured.cleaners.core import (
     clean,
     group_broken_paragraphs,
 )
-from unstructured.documents.elements import Footer, Header, Image, CompositeElement, Table
+from unstructured.documents.elements import (
+    Footer,
+    Header,
+    Image,
+    CompositeElement,
+    Table,
+)
 from unstructured.partition.auto import partition
 from tools.vision import vision_completion
 from docx import Document
@@ -87,7 +93,7 @@ index_to_remove = None
 for i, chunk in enumerate(chunks):
     if isinstance(chunk, CompositeElement):
         # 提取标题，假设是文本的第一行
-        title = chunk.text.split('\n')[0] if chunk.text else ""
+        title = chunk.text.split("\n")[0] if chunk.text else ""
         if any(keyword in title for keyword in keywords_for_misc):
             index_to_remove = i
             break
@@ -99,8 +105,8 @@ if index_to_remove is not None:
 # 打印剩余块的内容
 for chunk in chunks:
     if isinstance(chunk, CompositeElement):
-        title = chunk.text.split('\n')[0] if chunk.text else ""
-        body = '\n'.join(chunk.text.split('\n')[1:]) if chunk.text else ""
+        title = chunk.text.split("\n")[0] if chunk.text else ""
+        body = "\n".join(chunk.text.split("\n")[1:]) if chunk.text else ""
         print(f"Title: {title}\nBody: {body}\n")
     else:
         print(chunk.text)
@@ -113,8 +119,8 @@ chunks = chunks[:index_to_remove]
 # 打印剩余块的内容并将其添加到 Word 文档中
 for chunk in chunks:
     if isinstance(chunk, CompositeElement):
-        title = chunk.text.split('\n')[0] if chunk.text else ""
-        body = '\n'.join(chunk.text.split('\n')[1:]) if chunk.text else ""
+        title = chunk.text.split("\n")[0] if chunk.text else ""
+        body = "\n".join(chunk.text.split("\n")[1:]) if chunk.text else ""
         print(f"Title: {title}\nBody: {body}\n")
         doc.add_heading(title, level=1)
         doc.add_paragraph(body)

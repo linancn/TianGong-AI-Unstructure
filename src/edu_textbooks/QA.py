@@ -18,7 +18,6 @@ logging.basicConfig(
 )
 
 
-
 llm = ChatOpenAI(model="gpt-4o")
 
 json_schema = {
@@ -37,22 +36,21 @@ json_schema = {
         "Category": {
             "type": "string",
             "description": "Category of the question",
-                "enum": ["环境工程学", "大气环境学", "水环境学"]
-            }
-
+            "enum": ["环境工程学", "大气环境学", "水环境学"],
+        },
     },
     "required": ["Question", "Answer", "Category"],
 }
 structured_llm = llm.with_structured_output(json_schema)
 
-#遍历文件夹中的pickle文件
+# 遍历文件夹中的pickle文件
 for root, dirs, files in os.walk("temp/pickles"):
     for file in files:
         with open(os.path.join(root, file), "rb") as f:
             text_list = pickle.load(f)
 
         for i in range(0, len(text_list), 10):
-            chunk = text_list[i:i + 10]
+            chunk = text_list[i : i + 10]
             if len(chunk) < 10:
                 break
 

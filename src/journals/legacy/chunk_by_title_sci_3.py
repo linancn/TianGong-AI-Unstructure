@@ -16,5 +16,6 @@ def safe_sci_chunk(pdf_list):
         print(f"Error: {str(e)}")
         return None
 
+
 for pdf_list in pdf_lists:
     safe_sci_chunk(pdf_list)

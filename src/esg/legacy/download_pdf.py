@@ -12,7 +12,9 @@ def get_extension_from_content_type(content_type):
     return extension
 
 
-xata = XataClient(api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_ESG_DB_URL"))
+xata = XataClient(
+    api_key=os.getenv("XATA_API_KEY"), db_url=os.getenv("XATA_ESG_DB_URL")
+)
 
 data = xata.data().query(
     "ESG_Reports",

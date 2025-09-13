@@ -23,8 +23,8 @@ page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
 file_count = 0
 for page in page_iterator:
-    if 'Contents' in page:
-        for obj in page['Contents']:
+    if "Contents" in page:
+        for obj in page["Contents"]:
             # print(obj['Key'])
             file_count += 1
 

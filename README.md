@@ -139,7 +139,8 @@ tesseract --list-langs
 ## Run in Background
 ```bash
 watch -n 1 nvidia-smi
-find processed_docs/esg_txt/ -type f | wc -l
+#统计文件夹中的文件个数
+find processed_docs/journal_new_pickle/ -type f | wc -l
 ls -lt processed_docs/esg_txt/ | head -n 10
 
 nohup .venv/bin/python3.12 src/journals/chunk_by_title_sci.py > log.txt 2>&1 &
@@ -208,6 +209,8 @@ find processed_docs/journal_pickle/ -maxdepth 1 -type f | wc -l
 find processed_docs/journal_pickle/ -type f -exec ls -lS {} + | sort -n -k 5 | head -n 10
 ls -ltR processed_docs/journal_pickle/ | head -n 10
 
+find docs/processed_docs/journal_new_pickle/ -type f | wc -l
+
 nohup .venv/bin/python3 src/journals/2_pickle_to_pinecone_aws.py > journal_pinecone_aws_Oct31_log.txt 2>&1 &
 
 nohup .venv/bin/python3 src/patents/1_pickle_2_pinecone.py > patents_2_pinecone_log.txt 2>&1 &
@@ -228,4 +231,17 @@ nohup .venv/bin/python3 src/esg/1_file2pickle.py > esg_pickle_log.txt 2>&1 &
 
 nohup .venv/bin/python3 src/ali/3_pickle_to_opensearch.py > epr_log.txt 2>&1 &
 nohup .venv/bin/python3 src/ali/3_pickle_to_pinecone.py > epr_log_pinecone.txt 2>&1 &
+
+nohup .venv/bin/python3 src/journals/file_to_pickle1.py > redo1.log 2>&1 &
+nohup .venv/bin/python3 src/journals/file_to_pickle2.py > redo2.log 2>&1 &
+nohup .venv/bin/python3 src/journals/file_to_pickle3.py > redo3.log 2>&1 &
+nohup .venv/bin/python3 src/journals/file_to_pickle4.py > redo4.log 2>&1 &
+
+
+pkill -f "file_to_pickle1.py"
+pkill -f "file_to_pickle2.py"
+pkill -f "file_to_pickle3.py"
+pkill -f "file_to_pickle4.py"
+
+
 ```
