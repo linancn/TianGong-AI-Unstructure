@@ -1,3 +1,21 @@
+---
+docType: guide
+scope: repo
+status: legacy
+authoritative: false
+owner: unstructure
+language: en
+whenToUse: "When checking legacy setup notes; verify commands against current files before running."
+whenToUpdate: "When curating or deleting legacy setup and operation notes. Authoritative operation guidance belongs in AGENTS.md and _docs/runbooks/development.md."
+checkPaths:
+  - AGENTS.md
+  - .docpact/config.yaml
+  - requirements.txt
+  - src/**
+  - docker/**
+lastReviewedAt: 2026-04-29
+lastReviewedCommit: 09e5508f5b5391669df252fb67d8ba9a60fbf08e
+---
 
 # TianGong AI Unstructure
 
