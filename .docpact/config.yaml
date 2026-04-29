@@ -12,6 +12,7 @@ routing:
       paths:
         - AGENTS.md
         - .docpact/**
+        - .github/workflows/docpact.yml
         - _docs/**
     architecture:
       paths:
@@ -30,6 +31,7 @@ coverage:
     - AGENTS.md
     - README.md
     - .docpact/**
+    - .github/workflows/docpact.yml
     - _docs/**
     - requirements.txt
     - src/**
@@ -87,6 +89,8 @@ rules:
         kind: agent-contract
       - path: .docpact/config.yaml
         kind: machine-contract
+      - path: .github/workflows/docpact.yml
+        kind: governance-ci
       - path: _docs/**
         kind: governed-docs
       - path: README.md

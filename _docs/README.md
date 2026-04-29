@@ -10,6 +10,7 @@ whenToUpdate: "When repository documentation layers, key docs, or governance rou
 checkPaths:
   - AGENTS.md
   - .docpact/config.yaml
+  - .github/workflows/docpact.yml
   - _docs/**
 lastReviewedAt: 2026-04-29
 lastReviewedCommit: 09e5508f5b5391669df252fb67d8ba9a60fbf08e
@@ -23,6 +24,8 @@ This directory contains the repo-local source documents governed by docpact.
 
 - Layer 0: `AGENTS.md` for mandatory agent entry guidance.
 - Layer 1: `.docpact/config.yaml` for machine-readable governance.
+- CI: `.github/workflows/docpact.yml` for config validation and PR
+  documentation lint.
 - Layer 2: current contracts, architecture, standards, and runbooks under
   `_docs/**`.
 

@@ -10,6 +10,7 @@ whenToUpdate: "When documentation layers, metadata rules, or source-of-truth bou
 checkPaths:
   - AGENTS.md
   - .docpact/config.yaml
+  - .github/workflows/docpact.yml
   - _docs/**
 lastReviewedAt: 2026-04-29
 lastReviewedCommit: 09e5508f5b5391669df252fb67d8ba9a60fbf08e
@@ -22,6 +23,8 @@ lastReviewedCommit: 09e5508f5b5391669df252fb67d8ba9a60fbf08e
 - `AGENTS.md`: mandatory repo entry guidance for agents.
 - `.docpact/config.yaml`: machine-readable governance, routing, coverage, and
   document inventory.
+- `.github/workflows/docpact.yml`: CI enforcement for config validation and PR
+  documentation lint.
 - `_docs/contracts/**`: current constraints and ownership rules.
 - `_docs/architecture/**`: current processing topology and integration facts.
 - `_docs/runbooks/**`: executable procedures.
