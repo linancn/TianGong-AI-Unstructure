@@ -1,0 +1,147 @@
+version: 1
+layout: repo
+lastReviewedAt: "2026-04-29"
+lastReviewedCommit: "09e5508f5b5391669df252fb67d8ba9a60fbf08e"
+
+repo:
+  id: unstructure
+
+routing:
+  intents:
+    governance:
+      paths:
+        - AGENTS.md
+        - .docpact/**
+        - _docs/**
+    architecture:
+      paths:
+        - src/**
+        - docker/**
+        - requirements.txt
+    operations:
+      paths:
+        - README.md
+        - requirements.txt
+        - docker/**
+        - .vscode/**
+
+coverage:
+  include:
+    - AGENTS.md
+    - README.md
+    - .docpact/**
+    - _docs/**
+    - requirements.txt
+    - src/**
+    - docker/**
+    - .vscode/**
+  exclude:
+    - .git/**
+    - .docpact/runs/**
+    - .venv/**
+    - __pycache__/**
+    - "**/__pycache__/**"
+    - .pytest_cache/**
+    - .ruff_cache/**
+    - dist/**
+    - build/**
+    - docs/**
+    - processed_docs/**
+    - test/queue/**
+    - logs/**
+    - "*.log"
+    - .DS_Store
+    - "**/.DS_Store"
+
+docInventory:
+  include:
+    - AGENTS.md
+    - README.md
+    - .docpact/config.yaml
+    - _docs/**
+    - src/**/AGENTS.md
+  exclude:
+    - .git/**
+    - .docpact/runs/**
+    - .venv/**
+    - __pycache__/**
+    - "**/__pycache__/**"
+    - dist/**
+    - build/**
+    - docs/**
+    - processed_docs/**
+    - test/queue/**
+    - logs/**
+
+freshness:
+  warn_after_commits: 50
+  warn_after_days: 90
+  critical_after_days: 180
+
+rules:
+  - id: unstructure-governance
+    scope: repo
+    repo: unstructure
+    triggers:
+      - path: AGENTS.md
+        kind: agent-contract
+      - path: .docpact/config.yaml
+        kind: machine-contract
+      - path: _docs/**
+        kind: governed-docs
+      - path: README.md
+        kind: repo-entry
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: _docs/README.md
+        mode: review_or_update
+      - path: _docs/contracts/repo-contract.md
+        mode: review_or_update
+      - path: _docs/standards/documentation-standards.md
+        mode: review_or_update
+    reason: Repository entry guidance, governance config, and documentation standards must remain aligned.
+  - id: unstructure-processing-surface
+    scope: repo
+    repo: unstructure
+    triggers:
+      - path: src/**
+        kind: document-processing-source
+      - path: docker/**
+        kind: local-service-stack
+      - path: requirements.txt
+        kind: python-dependencies
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: README.md
+        mode: review_or_update
+      - path: _docs/architecture/repo-architecture.md
+        mode: review_or_update
+      - path: src/journals/AGENTS.md
+        mode: review_or_update
+      - path: _docs/contracts/repo-contract.md
+        mode: review_or_update
+      - path: _docs/runbooks/development.md
+        mode: review_or_update
+    reason: Processing scripts, dependency facts, and local service stack changes must stay synchronized with architecture and runbook docs.
+  - id: unstructure-operations
+    scope: repo
+    repo: unstructure
+    triggers:
+      - path: README.md
+        kind: developer-guide
+      - path: requirements.txt
+        kind: dependency-lock-lite
+      - path: .vscode/**
+        kind: editor-workflow
+    requiredDocs:
+      - path: README.md
+        mode: review_or_update
+      - path: _docs/runbooks/development.md
+        mode: review_or_update
+      - path: _docs/contracts/repo-contract.md
+        mode: review_or_update
+    reason: Setup, dependency, editor, and operational command changes define how processing jobs are run.
