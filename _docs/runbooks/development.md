@@ -12,8 +12,8 @@ checkPaths:
   - requirements.txt
   - src/**
   - docker/**
-lastReviewedAt: 2026-04-29
-lastReviewedCommit: 09e5508f5b5391669df252fb67d8ba9a60fbf08e
+lastReviewedAt: 2026-05-05
+lastReviewedCommit: f04e08fbe75d92c5ec518e8f043cdd2045c67bcd
 ---
 
 # Unstructure Development Runbook
@@ -39,6 +39,41 @@ docpact validate-config --root . --strict
 For Python script changes, run the smallest representative command for the
 touched domain, or at minimum a syntax/import smoke check against the changed
 script in the active virtual environment.
+
+For the KB parse worker, run a syntax smoke check before connecting to live
+queues:
+
+```bash
+python -m compileall src/kb_parse_worker
+```
+
+Run one queue message:
+
+```bash
+python -m src.kb_parse_worker.cli once
+```
+
+Run continuously:
+
+```bash
+python -m src.kb_parse_worker.cli run
+```
+
+Required runtime variables:
+
+```text
+DATABASE_URL or SUPABASE_DB_URL or KB_DATABASE_URL
+or SUPABASE_DB_HOST / SUPABASE_DB_PORT / SUPABASE_DB_NAME /
+SUPABASE_DB_USER / SUPABASE_DB_PASSWORD
+NAS_RAW_ROOT
+NAS_PROCESSED_ROOT
+UNSTRUCTURE_SERVE_URL
+UNSTRUCTURE_SERVE_BEARER_TOKEN
+KB_PROCESSED_S3_BUCKET when KB_PARSE_S3_READY_MODE=check
+```
+
+Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3
+sync is intentionally unavailable.
 
 ## Long-Running Jobs
 

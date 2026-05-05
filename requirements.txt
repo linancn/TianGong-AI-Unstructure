@@ -12,6 +12,7 @@ psycopg2-binary
 Pyarrow
 PyPDF2
 python-dotenv
+requests
 requests-aws4auth
 tenacity
 tiktoken
