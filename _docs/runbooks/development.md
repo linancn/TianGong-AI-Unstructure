@@ -72,13 +72,19 @@ UNSTRUCTURE_SERVE_BEARER_TOKEN
 KB_PROCESSED_S3_BUCKET when overriding the default processed bucket
 ```
 
+Current workspace worker deployment points `UNSTRUCTURE_SERVE_URL` at:
+
+```text
+UNSTRUCTURE_SERVE_URL=http://192.168.1.140:7770/mineru_with_images
+```
+
 Current workspace design documents point the processed S3 location at bucket
-`tiangong-kb` with prefix `processed`. The worker defaults to those values and
+`tiangong` with prefix `processed_docs`. The worker defaults to those values and
 keeps both overridable through runtime configuration:
 
 ```text
-KB_PROCESSED_S3_BUCKET=tiangong-kb
-KB_PROCESSED_S3_PREFIX=processed
+KB_PROCESSED_S3_BUCKET=tiangong
+KB_PROCESSED_S3_PREFIX=processed_docs
 ```
 
 Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3

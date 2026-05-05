@@ -99,7 +99,7 @@ class WorkerConfig:
             parser_profile=os.getenv("KB_PARSE_PARSER_PROFILE", "mineru_with_images"),
             parser_version=os.getenv("KB_PARSE_PARSER_VERSION", "unstructure-serve"),
             s3_ready_mode=os.getenv("KB_PARSE_S3_READY_MODE", "check"),
-            s3_bucket=os.getenv("KB_PROCESSED_S3_BUCKET", "tiangong-kb"),
-            s3_processed_prefix=os.getenv("KB_PROCESSED_S3_PREFIX", "processed"),
+            s3_bucket=os.getenv("KB_PROCESSED_S3_BUCKET", "tiangong"),
+            s3_processed_prefix=os.getenv("KB_PROCESSED_S3_PREFIX", "processed_docs"),
             s3_strict_hash=_bool_env("KB_PARSE_S3_STRICT_HASH", False),
         )
