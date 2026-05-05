@@ -23,6 +23,7 @@ routing:
       paths:
         - README.md
         - requirements.txt
+        - ecosystem*.json
         - docker/**
         - .vscode/**
 
@@ -33,6 +34,7 @@ coverage:
     - .docpact/**
     - .github/workflows/docpact.yml
     - _docs/**
+    - ecosystem*.json
     - requirements.txt
     - src/**
     - docker/**
@@ -137,6 +139,8 @@ rules:
     triggers:
       - path: README.md
         kind: developer-guide
+      - path: ecosystem*.json
+        kind: process-manager-config
       - path: requirements.txt
         kind: dependency-lock-lite
       - path: .vscode/**

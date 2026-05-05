@@ -20,7 +20,7 @@ class S3ReadyResult:
 
 def processed_manifest_key(prefix: str, snapshot: ParseSnapshot) -> str:
     clean_prefix = prefix.strip("/")
-    return f"{clean_prefix}/{snapshot.collection_storage_path}/{snapshot.document_id}/manifest.json"
+    return f"{clean_prefix}/{snapshot.processed_storage_path}/{snapshot.document_id}/manifest.json"
 
 
 def wait_for_s3_processed_ready(
@@ -42,6 +42,8 @@ def wait_for_s3_processed_ready(
             raise RuntimeError(f"S3_MANIFEST_MISMATCH: {field}")
     if manifest.get("collection_storage_path") != expected.get("collection_storage_path"):
         raise RuntimeError("S3_MANIFEST_MISMATCH: collection_storage_path")
+    if manifest.get("processed_storage_path") != expected.get("processed_storage_path"):
+        raise RuntimeError("S3_MANIFEST_MISMATCH: processed_storage_path")
 
     base = "/".join(manifest_key.split("/")[:-1])
     for artifact_key, artifact_name in manifest["artifacts"].items():
@@ -59,4 +61,3 @@ def wait_for_s3_processed_ready(
                 raise RuntimeError(f"S3_ARTIFACT_MISMATCH: {artifact_name} sha256")
 
     return S3ReadyResult(ready=True, manifest_s3_key=manifest_key)
-

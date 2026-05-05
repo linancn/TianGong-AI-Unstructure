@@ -49,6 +49,13 @@ def database_url_from_env() -> str:
     )
 
 
+def load_worker_env() -> None:
+    repo_env = Path(__file__).resolve().parents[2] / ".env"
+    if repo_env.exists():
+        load_dotenv(repo_env)
+    load_dotenv()
+
+
 @dataclass(frozen=True)
 class WorkerConfig:
     database_url: str
@@ -56,6 +63,7 @@ class WorkerConfig:
     queue_name: str
     queue_vt_seconds: int
     lock_seconds: int
+    heartbeat_interval_seconds: int
     poll_interval_seconds: int
     nas_raw_root: Path
     nas_processed_root: Path
@@ -70,7 +78,7 @@ class WorkerConfig:
 
     @classmethod
     def from_env(cls) -> "WorkerConfig":
-        load_dotenv()
+        load_worker_env()
         worker_id = os.getenv("KB_PARSE_WORKER_ID") or f"{socket.gethostname()}-{os.getpid()}"
         unstructure_url = os.getenv("UNSTRUCTURE_SERVE_URL")
         token = os.getenv("UNSTRUCTURE_SERVE_BEARER_TOKEN")
@@ -91,6 +99,7 @@ class WorkerConfig:
             queue_name=os.getenv("KB_PARSE_QUEUE", "kb_parse_queue"),
             queue_vt_seconds=_int_env("KB_PARSE_QUEUE_VT_SECONDS", 1800),
             lock_seconds=_int_env("KB_PARSE_LOCK_SECONDS", 1800),
+            heartbeat_interval_seconds=_int_env("KB_PARSE_HEARTBEAT_INTERVAL_SECONDS", 60),
             poll_interval_seconds=_int_env("KB_PARSE_POLL_INTERVAL_SECONDS", 5),
             nas_raw_root=Path(nas_raw_root),
             nas_processed_root=Path(nas_processed_root),

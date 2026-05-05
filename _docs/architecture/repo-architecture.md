@@ -30,6 +30,8 @@ Workflows are organized by source domain under `src/**`.
 - `src/kb_parse_worker/**`: KB F03 parse worker that consumes
   `kb_parse_queue`, claims jobs through the KB control plane, calls
   Unstructure-Serve, and publishes processed artifacts.
+- `ecosystem.kb_parse_worker.json`: PM2 process definition for the KB parse
+  worker.
 - `src/journals/**`: journal workflows; also read `src/journals/AGENTS.md`.
 - `src/tools/**` and per-domain `tools/**`: helper modules.
 - `src/weaviate/**`: local Weaviate utility scripts.
@@ -49,8 +51,11 @@ the referenced files still exist.
 - Output artifacts feed downstream knowledge-base and search/index services.
 - The KB parse worker reads raw document locations from `kb_documents.raw_uri`,
   writes processed `jsonl`/`pkl`/`manifest.json` artifacts under the configured
-  NAS processed root, records parse local-ready through KB RPCs, and marks
+  NAS processed root using a `_pickle` suffixed path derived from the collection
+  storage path, records parse local-ready through KB RPCs, and marks
   `processed_s3_ready` through worker-lock-checked KB RPCs after S3 ready
-  checks.
+  checks. PM2 keeps the long-running worker process resident; the worker's
+  heartbeat loop keeps the job lock and PGMQ visibility timeout fresh while a
+  document is being parsed.
 - Edge functions query indexes or storage populated by these workflows, but API
   serving remains outside this repository.

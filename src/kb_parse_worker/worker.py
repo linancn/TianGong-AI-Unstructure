@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -32,6 +33,53 @@ def _validate_raw_file(path: Path, expected_size: int | None, expected_sha256: s
         raise RuntimeError("RAW_SIZE_MISMATCH")
     if _sha256(path).lower() != expected_sha256.lower():
         raise RuntimeError("RAW_HASH_MISMATCH")
+
+
+class LeaseMaintainer:
+    def __init__(self, config: WorkerConfig, job_id: str):
+        self.config = config
+        self.job_id = job_id
+        self._stop = threading.Event()
+        self._error: Exception | None = None
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"kb-parse-heartbeat-{job_id}",
+            daemon=True,
+        )
+
+    def __enter__(self) -> "LeaseMaintainer":
+        self.heartbeat()
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def heartbeat(self) -> None:
+        with control_plane.connect(self.config.database_url) as conn:
+            ok = control_plane.heartbeat_job(
+                conn,
+                self.job_id,
+                self.config.worker_id,
+                self.config.lock_seconds,
+                self.config.queue_vt_seconds,
+            )
+        if not ok:
+            raise RuntimeError("HEARTBEAT_LOST")
+
+    def check(self) -> None:
+        if self._error is not None:
+            raise RuntimeError("HEARTBEAT_LOST") from self._error
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.config.heartbeat_interval_seconds):
+            try:
+                self.heartbeat()
+            except Exception as exc:
+                LOGGER.exception("heartbeat failed for parse job %s", self.job_id)
+                self._error = exc
+                self._stop.set()
 
 
 class ParseWorker:
@@ -71,86 +119,84 @@ class ParseWorker:
             return
 
         try:
-            control_plane.heartbeat_job(
-                conn,
-                claimed.job_id,
-                self.config.worker_id,
-                self.config.lock_seconds,
-                self.config.queue_vt_seconds,
-            )
-            snapshot = load_parse_snapshot(conn, claimed.job_id)
-            raw_path = resolve_raw_path(snapshot.raw_uri, self.config.nas_raw_root)
-            _validate_raw_file(raw_path, snapshot.file_size, snapshot.sha256)
+            with LeaseMaintainer(self.config, claimed.job_id) as lease:
+                snapshot = load_parse_snapshot(conn, claimed.job_id)
+                raw_path = resolve_raw_path(snapshot.raw_uri, self.config.nas_raw_root)
+                _validate_raw_file(raw_path, snapshot.file_size, snapshot.sha256)
+                lease.check()
 
-            result = parse_with_unstructure_serve(
-                raw_path,
-                self.config.unstructure_serve_url,
-                self.config.unstructure_serve_bearer_token,
-            )
-            final_dir, artifact_info = write_processed_artifacts(
-                result,
-                snapshot,
-                self.config.nas_processed_root,
-                self.config.parser_profile,
-                self.config.parser_version,
-            )
-            manifest_local_uri = final_dir.joinpath("manifest.json").as_posix()
-            metadata_json = {
-                "processed": {
-                    "parser_profile": self.config.parser_profile,
-                    "parser_version": self.config.parser_version,
-                    "chunk_count": artifact_info.chunk_count,
-                    "artifact_uuid": artifact_info.artifact_uuid,
+                result = parse_with_unstructure_serve(
+                    raw_path,
+                    self.config.unstructure_serve_url,
+                    self.config.unstructure_serve_bearer_token,
+                )
+                lease.check()
+
+                final_dir, artifact_info = write_processed_artifacts(
+                    result,
+                    snapshot,
+                    self.config.nas_processed_root,
+                    self.config.parser_profile,
+                    self.config.parser_version,
+                )
+                lease.check()
+
+                manifest_local_uri = final_dir.joinpath("manifest.json").as_posix()
+                metadata_json = {
+                    "processed": {
+                        "parser_profile": self.config.parser_profile,
+                        "parser_version": self.config.parser_version,
+                        "chunk_count": artifact_info.chunk_count,
+                        "artifact_uuid": artifact_info.artifact_uuid,
+                    }
                 }
-            }
 
-            ok = control_plane.mark_parse_local_ready(
-                conn,
-                claimed.job_id,
-                self.config.worker_id,
-                claimed.document_id,
-                claimed.document_version,
-                manifest_local_uri,
-                artifact_info.artifact_uuid,
-                artifact_info.manifest_hash,
-                artifact_info.chunk_count,
-                metadata_json,
-            )
-            if not ok:
-                raise RuntimeError("mark_parse_local_ready returned false")
+                ok = control_plane.mark_parse_local_ready(
+                    conn,
+                    claimed.job_id,
+                    self.config.worker_id,
+                    claimed.document_id,
+                    claimed.document_version,
+                    manifest_local_uri,
+                    artifact_info.artifact_uuid,
+                    artifact_info.manifest_hash,
+                    artifact_info.chunk_count,
+                    metadata_json,
+                )
+                if not ok:
+                    raise RuntimeError("mark_parse_local_ready returned false")
+                lease.check()
 
-            if self.config.s3_ready_mode == "skip":
-                if not self.config.s3_bucket:
+                if self.config.s3_ready_mode == "skip":
                     manifest_s3_key = processed_manifest_key(self.config.s3_processed_prefix, snapshot)
                 else:
-                    manifest_s3_key = processed_manifest_key(self.config.s3_processed_prefix, snapshot)
-            else:
-                if not self.config.s3_bucket:
-                    raise RuntimeError("S3_NOT_READY: KB_PROCESSED_S3_BUCKET is required")
-                ready = wait_for_s3_processed_ready(
-                    snapshot,
-                    artifact_info,
-                    self.config.s3_bucket,
-                    self.config.s3_processed_prefix,
-                    self.config.s3_strict_hash,
-                )
-                manifest_s3_key = ready.manifest_s3_key
+                    if not self.config.s3_bucket:
+                        raise RuntimeError("S3_NOT_READY: KB_PROCESSED_S3_BUCKET is required")
+                    ready = wait_for_s3_processed_ready(
+                        snapshot,
+                        artifact_info,
+                        self.config.s3_bucket,
+                        self.config.s3_processed_prefix,
+                        self.config.s3_strict_hash,
+                    )
+                    manifest_s3_key = ready.manifest_s3_key
+                lease.check()
 
-            ok = control_plane.mark_processed_s3_ready(
-                conn,
-                claimed.job_id,
-                self.config.worker_id,
-                claimed.document_id,
-                claimed.document_version,
-                manifest_s3_key,
-                artifact_info.manifest_hash,
-                artifact_info.artifact_uuid,
-                manifest_local_uri,
-                artifact_info.chunk_count,
-            )
-            if not ok:
-                raise RuntimeError("mark_processed_s3_ready returned false")
-            queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
+                ok = control_plane.mark_processed_s3_ready(
+                    conn,
+                    claimed.job_id,
+                    self.config.worker_id,
+                    claimed.document_id,
+                    claimed.document_version,
+                    manifest_s3_key,
+                    artifact_info.manifest_hash,
+                    artifact_info.artifact_uuid,
+                    manifest_local_uri,
+                    artifact_info.chunk_count,
+                )
+                if not ok:
+                    raise RuntimeError("mark_processed_s3_ready returned false")
+                queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
         except Exception as exc:
             LOGGER.exception("parse job %s failed", claimed.job_id)
             retryable = str(exc) not in {"RAW_HASH_MISMATCH", "EMPTY_RESULT"}

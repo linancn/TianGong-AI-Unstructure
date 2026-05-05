@@ -38,9 +38,10 @@ flows.
 
 ## Processing Surface
 
-Scripts under `src/**`, dependency facts in `requirements.txt`, and local stack
-files under `docker/**` define processing behavior. Changes to input formats,
-output locations, chunking logic, embedding/index targets, OCR dependencies, or
+Scripts under `src/**`, dependency facts in `requirements.txt`, PM2 ecosystem
+files, and local stack files under `docker/**` define processing behavior and
+runtime operation. Changes to input formats, output locations, chunking logic,
+embedding/index targets, OCR dependencies, process-manager definitions, or
 long-running job commands require review of:
 
 - `README.md`
