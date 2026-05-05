@@ -11,8 +11,8 @@ checkPaths:
   - src/**
   - docker/**
   - requirements.txt
-lastReviewedAt: 2026-04-29
-lastReviewedCommit: 09e5508f5b5391669df252fb67d8ba9a60fbf08e
+lastReviewedAt: 2026-05-05
+lastReviewedCommit: f04e08fbe75d92c5ec518e8f043cdd2045c67bcd
 ---
 
 # Unstructure Architecture
@@ -27,6 +27,9 @@ Workflows are organized by source domain under `src/**`.
 
 - `src/{ali,education,edu_textbooks,esg,journals,patents,pptx,reports,standards}/**`:
   source-domain processing scripts.
+- `src/kb_parse_worker/**`: KB F03 parse worker that consumes
+  `kb_parse_queue`, claims jobs through the KB control plane, calls
+  Unstructure-Serve, and publishes processed artifacts.
 - `src/journals/**`: journal workflows; also read `src/journals/AGENTS.md`.
 - `src/tools/**` and per-domain `tools/**`: helper modules.
 - `src/weaviate/**`: local Weaviate utility scripts.
@@ -44,5 +47,9 @@ the referenced files still exist.
 ## Integration Points
 
 - Output artifacts feed downstream knowledge-base and search/index services.
+- The KB parse worker reads raw document locations from `kb_documents.raw_uri`,
+  writes processed `jsonl`/`pkl`/`manifest.json` artifacts under the configured
+  NAS processed root, and marks `processed_s3_ready` through KB RPCs after S3
+  ready checks.
 - Edge functions query indexes or storage populated by these workflows, but API
   serving remains outside this repository.
