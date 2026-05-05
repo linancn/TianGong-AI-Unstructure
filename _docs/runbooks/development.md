@@ -59,6 +59,21 @@ Run continuously:
 python -m src.kb_parse_worker.cli run
 ```
 
+Run continuously under PM2:
+
+```bash
+pm2 start ecosystem.kb_parse_worker.json
+pm2 save
+pm2 resurrect
+pm2 logs kb-parse-worker
+pm2 restart kb-parse-worker
+pm2 stop kb-parse-worker
+pm2 delete kb-parse-worker
+```
+
+The KB parse worker explicitly loads the repository-local `.env` file before
+falling back to the default `.env` lookup, so it can be started from either the
+repository root or the workspace root.
 Required runtime variables:
 
 ```text
@@ -86,6 +101,18 @@ keeps both overridable through runtime configuration:
 KB_PROCESSED_S3_BUCKET=tiangong
 KB_PROCESSED_S3_PREFIX=processed_docs
 ```
+
+Long-running parse jobs keep both the KB job lock and PGMQ visibility timeout
+fresh through `heartbeat_job(...)`. The worker defaults to:
+
+```text
+KB_PARSE_HEARTBEAT_INTERVAL_SECONDS=60
+```
+
+Processed artifact paths are derived from the collection storage path by adding
+`_pickle` to each path segment. For example, collection path
+`/course/thu_humanities` resolves raw files under `course/thu_humanities` and
+processed artifacts under `course_pickle/thu_humanities_pickle`.
 
 Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3
 sync is intentionally unavailable.

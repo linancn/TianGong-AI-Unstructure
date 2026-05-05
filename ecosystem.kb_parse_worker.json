@@ -1,0 +1,21 @@
+{
+  "apps": [
+    {
+      "name": "kb-parse-worker",
+      "cwd": ".",
+      "script": ".venv/bin/python",
+      "interpreter": "none",
+      "args": "-m src.kb_parse_worker.cli run --log-level INFO",
+      "watch": false,
+      "autorestart": true,
+      "max_restarts": 10,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "out_file": "logs/kb-parse-worker.out.log",
+      "error_file": "logs/kb-parse-worker.err.log",
+      "merge_logs": true,
+      "time": true
+    }
+  ]
+}

@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-import psycopg2.extras
-
 
 @dataclass(frozen=True)
 class ParseSnapshot:
@@ -25,6 +23,7 @@ class ParseSnapshot:
     collection_name: str
     collection_path: str
     collection_storage_path: str
+    processed_storage_path: str
     content_type: str | None
     collection_metadata_schema_json: dict
     document_metadata_json: dict
@@ -41,7 +40,16 @@ def collection_storage_path(collection_path: str) -> str:
     return "/".join(parts)
 
 
+def processed_storage_path(collection_storage_path: str) -> str:
+    parts = [part for part in collection_storage_path.split("/") if part]
+    if not parts:
+        raise ValueError("collection storage path cannot resolve to an empty processed path")
+    return "/".join(part if part.endswith("_pickle") else f"{part}_pickle" for part in parts)
+
+
 def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
+    import psycopg2.extras
+
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             """
@@ -80,6 +88,7 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
         raise RuntimeError(f"Document {row['document_id']} has no raw_uri.")
 
     path = str(row["collection_path"])
+    storage_path = collection_storage_path(path)
     return ParseSnapshot(
         job_id=str(row["job_id"]),
         document_id=str(row["document_id"]),
@@ -93,7 +102,8 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
         primary_collection_id=str(row["primary_collection_id"]),
         collection_name=str(row["collection_name"]),
         collection_path=path,
-        collection_storage_path=collection_storage_path(path),
+        collection_storage_path=storage_path,
+        processed_storage_path=processed_storage_path(storage_path),
         content_type=row["content_type"],
         collection_metadata_schema_json=dict(row["collection_metadata_schema_json"] or {}),
         document_metadata_json=dict(row["document_metadata_json"] or {}),
@@ -115,4 +125,3 @@ def resolve_raw_path(raw_uri: str, nas_raw_root: Path) -> Path:
             rel = rel[len("raw/") :]
         return nas_raw_root / rel
     raise ValueError(f"Unsupported raw_uri scheme: {parsed.scheme}")
-

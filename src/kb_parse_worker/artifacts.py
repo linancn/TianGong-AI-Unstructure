@@ -36,7 +36,7 @@ def write_processed_artifacts(
         raise ValueError("EMPTY_RESULT")
 
     artifact_uuid = str(uuid.uuid4())
-    collection_root = nas_processed_root / snapshot.collection_storage_path
+    collection_root = nas_processed_root / snapshot.processed_storage_path
     tmp_dir = collection_root / ".tmp" / f"{snapshot.job_id}-{artifact_uuid}"
     final_dir = collection_root / snapshot.document_id
     if tmp_dir.exists():

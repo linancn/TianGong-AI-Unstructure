@@ -52,6 +52,7 @@ def build_manifest(
         "collection_id": snapshot.primary_collection_id,
         "collection_path": snapshot.collection_path,
         "collection_storage_path": snapshot.collection_storage_path,
+        "processed_storage_path": snapshot.processed_storage_path,
         "chunk_count": chunk_count,
         "artifacts": {
             "chunks_jsonl": jsonl_name,
@@ -79,4 +80,3 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
         json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
     )
-
