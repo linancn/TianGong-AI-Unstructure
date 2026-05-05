@@ -95,6 +95,29 @@ class ParseWorker:
                 self.config.parser_version,
             )
             manifest_local_uri = final_dir.joinpath("manifest.json").as_posix()
+            metadata_json = {
+                "processed": {
+                    "parser_profile": self.config.parser_profile,
+                    "parser_version": self.config.parser_version,
+                    "chunk_count": artifact_info.chunk_count,
+                    "artifact_uuid": artifact_info.artifact_uuid,
+                }
+            }
+
+            ok = control_plane.mark_parse_local_ready(
+                conn,
+                claimed.job_id,
+                self.config.worker_id,
+                claimed.document_id,
+                claimed.document_version,
+                manifest_local_uri,
+                artifact_info.artifact_uuid,
+                artifact_info.manifest_hash,
+                artifact_info.chunk_count,
+                metadata_json,
+            )
+            if not ok:
+                raise RuntimeError("mark_parse_local_ready returned false")
 
             if self.config.s3_ready_mode == "skip":
                 if not self.config.s3_bucket:
@@ -116,6 +139,7 @@ class ParseWorker:
             ok = control_plane.mark_processed_s3_ready(
                 conn,
                 claimed.job_id,
+                self.config.worker_id,
                 claimed.document_id,
                 claimed.document_version,
                 manifest_s3_key,

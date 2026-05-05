@@ -85,9 +85,46 @@ def fail_job(
     conn.commit()
 
 
+def mark_parse_local_ready(
+    conn,
+    job_id: str,
+    worker_id: str,
+    document_id: str,
+    document_version: int,
+    manifest_local_uri: str,
+    artifact_uuid: str,
+    manifest_hash: str,
+    chunk_count: int,
+    metadata_json: dict,
+) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select public.mark_parse_local_ready(
+              %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            (
+                job_id,
+                worker_id,
+                document_id,
+                document_version,
+                manifest_local_uri,
+                artifact_uuid,
+                manifest_hash,
+                chunk_count,
+                psycopg2.extras.Json(metadata_json),
+            ),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return bool(row and row[0])
+
+
 def mark_processed_s3_ready(
     conn,
     job_id: str,
+    worker_id: str,
     document_id: str,
     document_version: int,
     manifest_s3_key: str,
@@ -100,11 +137,12 @@ def mark_processed_s3_ready(
         cur.execute(
             """
             select public.mark_processed_s3_ready(
-              %s, %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,
             (
                 job_id,
+                worker_id,
                 document_id,
                 document_version,
                 manifest_s3_key,
@@ -117,4 +155,3 @@ def mark_processed_s3_ready(
         row = cur.fetchone()
     conn.commit()
     return bool(row and row[0])
-

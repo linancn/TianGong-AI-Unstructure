@@ -49,7 +49,8 @@ the referenced files still exist.
 - Output artifacts feed downstream knowledge-base and search/index services.
 - The KB parse worker reads raw document locations from `kb_documents.raw_uri`,
   writes processed `jsonl`/`pkl`/`manifest.json` artifacts under the configured
-  NAS processed root, and marks `processed_s3_ready` through KB RPCs after S3
-  ready checks.
+  NAS processed root, records parse local-ready through KB RPCs, and marks
+  `processed_s3_ready` through worker-lock-checked KB RPCs after S3 ready
+  checks.
 - Edge functions query indexes or storage populated by these workflows, but API
   serving remains outside this repository.

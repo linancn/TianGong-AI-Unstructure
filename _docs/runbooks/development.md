@@ -69,7 +69,16 @@ NAS_RAW_ROOT
 NAS_PROCESSED_ROOT
 UNSTRUCTURE_SERVE_URL
 UNSTRUCTURE_SERVE_BEARER_TOKEN
-KB_PROCESSED_S3_BUCKET when KB_PARSE_S3_READY_MODE=check
+KB_PROCESSED_S3_BUCKET when overriding the default processed bucket
+```
+
+Current workspace design documents point the processed S3 location at bucket
+`tiangong-kb` with prefix `processed`. The worker defaults to those values and
+keeps both overridable through runtime configuration:
+
+```text
+KB_PROCESSED_S3_BUCKET=tiangong-kb
+KB_PROCESSED_S3_PREFIX=processed
 ```
 
 Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3

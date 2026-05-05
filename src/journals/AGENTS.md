@@ -12,7 +12,7 @@ checkPaths:
   - _docs/architecture/repo-architecture.md
   - _docs/runbooks/development.md
 lastReviewedAt: 2026-05-05
-lastReviewedCommit: f04e08fbe75d92c5ec518e8f043cdd2045c67bcd
+lastReviewedCommit: ebc538d28329917bec10529a038d4553ff6c6135
 ---
 
 # Journals Agent Notes
