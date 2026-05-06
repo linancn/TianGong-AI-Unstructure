@@ -80,3 +80,19 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
         json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def load_artifact_info(manifest_path: Path, manifest_hash: str | None = None) -> ArtifactInfo:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return ArtifactInfo(
+        artifact_uuid=str(manifest["artifact_uuid"]),
+        chunk_count=int(manifest["chunk_count"]),
+        jsonl_name=str(manifest["artifacts"]["chunks_jsonl"]),
+        pkl_name=str(manifest["artifacts"]["chunks_pkl"]),
+        jsonl_sha256=str(manifest["sha256"]["chunks_jsonl"]),
+        pkl_sha256=str(manifest["sha256"]["chunks_pkl"]),
+        jsonl_size_bytes=int(manifest["size_bytes"]["chunks_jsonl"]),
+        pkl_size_bytes=int(manifest["size_bytes"]["chunks_pkl"]),
+        manifest_hash=manifest_hash or file_sha256(manifest_path),
+        manifest=manifest,
+    )

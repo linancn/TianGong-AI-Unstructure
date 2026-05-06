@@ -27,11 +27,13 @@ Workflows are organized by source domain under `src/**`.
 
 - `src/{ali,education,edu_textbooks,esg,journals,patents,pptx,reports,standards}/**`:
   source-domain processing scripts.
-- `src/kb_parse_worker/**`: KB F03 parse worker that consumes
-  `kb_parse_queue`, claims jobs through the KB control plane, calls
-  Unstructure-Serve, and publishes processed artifacts.
-- `ecosystem.kb_parse_worker.json`: PM2 process definition for the KB parse
-  worker.
+- `src/kb_parse_worker/**`: KB F03 parse and S3-ready workers. The parse
+  worker consumes `kb_parse_queue`, claims jobs through the KB control plane,
+  calls Unstructure-Serve, publishes processed artifacts to NAS, and enqueues
+  the S3-ready check. The S3-ready worker consumes `kb_s3_ready_queue` and
+  marks processed artifacts ready after S3 verification.
+- `ecosystem.kb_parse_worker.json`: PM2 process definitions for the KB parse
+  worker and S3-ready worker.
 - `src/journals/**`: journal workflows; also read `src/journals/AGENTS.md`.
 - `src/tools/**` and per-domain `tools/**`: helper modules.
 - `src/weaviate/**`: local Weaviate utility scripts.
@@ -50,12 +52,16 @@ the referenced files still exist.
 
 - Output artifacts feed downstream knowledge-base and search/index services.
 - The KB parse worker reads raw document locations from `kb_documents.raw_uri`,
-  writes processed `jsonl`/`pkl`/`manifest.json` artifacts under the configured
-  NAS processed root using a `_pickle` suffixed path derived from the collection
-  storage path, records parse local-ready through KB RPCs, and marks
-  `processed_s3_ready` through worker-lock-checked KB RPCs after S3 ready
-  checks. PM2 keeps the long-running worker process resident; the worker's
-  heartbeat loop keeps the job lock and PGMQ visibility timeout fresh while a
-  document is being parsed.
+  requires raw files to live under the collection-derived storage path using
+  the renamed canonical filename `{document_id}{file_ext}`, writes processed
+  `jsonl`/`pkl`/`manifest.json` artifacts under the configured NAS processed
+  root using a `_pickle` suffixed path derived from the collection storage
+  path, and calls `complete_parse_local_ready_and_enqueue_s3_check(...)`.
+  That RPC completes the parse job, leaves the document in `s3_sync_pending`,
+  and enqueues a durable `s3_ready` job. A separate S3-ready worker then
+  verifies the processed manifest/jsonl/pkl objects after NAS-to-S3 sync and
+  calls `complete_s3_ready_check(...)` to mark `processed_s3_ready`. PM2 keeps
+  both long-running worker processes resident; each worker's heartbeat loop
+  keeps its active job lock and PGMQ visibility timeout fresh.
 - Edge functions query indexes or storage populated by these workflows, but API
   serving remains outside this repository.

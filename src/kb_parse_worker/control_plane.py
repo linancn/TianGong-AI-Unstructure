@@ -18,6 +18,15 @@ class ClaimedJob:
     payload_json: dict
 
 
+@dataclass(frozen=True)
+class S3ReadyEnqueueResult:
+    parse_job_id: str
+    parse_job_status: str
+    s3_ready_job_id: str
+    s3_ready_msg_id: int
+    document_status: str
+
+
 def connect(database_url: str):
     return psycopg2.connect(database_url)
 
@@ -137,6 +146,89 @@ def mark_processed_s3_ready(
         cur.execute(
             """
             select public.mark_processed_s3_ready(
+              %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            (
+                job_id,
+                worker_id,
+                document_id,
+                document_version,
+                manifest_s3_key,
+                manifest_hash,
+                artifact_uuid,
+                manifest_local_uri,
+                chunk_count,
+            ),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return bool(row and row[0])
+
+
+def complete_parse_local_ready_and_enqueue_s3_check(
+    conn,
+    job_id: str,
+    worker_id: str,
+    document_id: str,
+    document_version: int,
+    manifest_local_uri: str,
+    artifact_uuid: str,
+    manifest_hash: str,
+    chunk_count: int,
+    metadata_json: dict,
+    s3_ready_payload_json: dict,
+) -> S3ReadyEnqueueResult | None:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            """
+            select *
+            from public.complete_parse_local_ready_and_enqueue_s3_check(
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            (
+                job_id,
+                worker_id,
+                document_id,
+                document_version,
+                manifest_local_uri,
+                artifact_uuid,
+                manifest_hash,
+                chunk_count,
+                psycopg2.extras.Json(metadata_json),
+                psycopg2.extras.Json(s3_ready_payload_json),
+            ),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    if row is None:
+        return None
+    return S3ReadyEnqueueResult(
+        parse_job_id=str(row["parse_job_id"]),
+        parse_job_status=str(row["parse_job_status"]),
+        s3_ready_job_id=str(row["s3_ready_job_id"]),
+        s3_ready_msg_id=int(row["s3_ready_msg_id"]),
+        document_status=str(row["document_status"]),
+    )
+
+
+def complete_s3_ready_check(
+    conn,
+    job_id: str,
+    worker_id: str,
+    document_id: str,
+    document_version: int,
+    manifest_s3_key: str,
+    manifest_hash: str,
+    artifact_uuid: str,
+    manifest_local_uri: str,
+    chunk_count: int,
+) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select public.complete_s3_ready_check(
               %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,

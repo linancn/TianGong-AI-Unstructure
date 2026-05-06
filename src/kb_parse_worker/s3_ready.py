@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 
 import boto3
+from botocore.exceptions import ClientError
 
 from .manifest import ArtifactInfo
 from .snapshot import ParseSnapshot
@@ -23,7 +25,7 @@ def processed_manifest_key(prefix: str, snapshot: ParseSnapshot) -> str:
     return f"{clean_prefix}/{snapshot.processed_storage_path}/{snapshot.document_id}/manifest.json"
 
 
-def wait_for_s3_processed_ready(
+def _check_s3_processed_ready(
     snapshot: ParseSnapshot,
     artifact_info: ArtifactInfo,
     bucket: str,
@@ -61,3 +63,30 @@ def wait_for_s3_processed_ready(
                 raise RuntimeError(f"S3_ARTIFACT_MISMATCH: {artifact_name} sha256")
 
     return S3ReadyResult(ready=True, manifest_s3_key=manifest_key)
+
+
+def wait_for_s3_processed_ready(
+    snapshot: ParseSnapshot,
+    artifact_info: ArtifactInfo,
+    bucket: str,
+    prefix: str,
+    strict_hash: bool = False,
+    timeout_seconds: int = 900,
+    poll_interval_seconds: int = 15,
+) -> S3ReadyResult:
+    deadline = time.monotonic() + max(0, timeout_seconds)
+    interval = max(1, poll_interval_seconds)
+
+    while True:
+        try:
+            return _check_s3_processed_ready(
+                snapshot,
+                artifact_info,
+                bucket,
+                prefix,
+                strict_hash,
+            )
+        except (ClientError, RuntimeError) as exc:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"S3_NOT_READY_AFTER_TIMEOUT: {exc}") from exc
+            time.sleep(min(interval, max(0.0, deadline - time.monotonic())))

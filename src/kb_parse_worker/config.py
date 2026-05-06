@@ -61,6 +61,7 @@ class WorkerConfig:
     database_url: str
     worker_id: str
     queue_name: str
+    s3_ready_queue_name: str
     queue_vt_seconds: int
     lock_seconds: int
     heartbeat_interval_seconds: int
@@ -75,6 +76,8 @@ class WorkerConfig:
     s3_bucket: str | None
     s3_processed_prefix: str
     s3_strict_hash: bool
+    s3_ready_timeout_seconds: int
+    s3_ready_poll_interval_seconds: int
 
     @classmethod
     def from_env(cls) -> "WorkerConfig":
@@ -97,6 +100,7 @@ class WorkerConfig:
             database_url=database_url_from_env(),
             worker_id=worker_id,
             queue_name=os.getenv("KB_PARSE_QUEUE", "kb_parse_queue"),
+            s3_ready_queue_name=os.getenv("KB_S3_READY_QUEUE", "kb_s3_ready_queue"),
             queue_vt_seconds=_int_env("KB_PARSE_QUEUE_VT_SECONDS", 1800),
             lock_seconds=_int_env("KB_PARSE_LOCK_SECONDS", 1800),
             heartbeat_interval_seconds=_int_env("KB_PARSE_HEARTBEAT_INTERVAL_SECONDS", 60),
@@ -111,4 +115,6 @@ class WorkerConfig:
             s3_bucket=os.getenv("KB_PROCESSED_S3_BUCKET", "tiangong"),
             s3_processed_prefix=os.getenv("KB_PROCESSED_S3_PREFIX", "processed_docs"),
             s3_strict_hash=_bool_env("KB_PARSE_S3_STRICT_HASH", False),
+            s3_ready_timeout_seconds=_int_env("KB_PARSE_S3_READY_TIMEOUT_SECONDS", 900),
+            s3_ready_poll_interval_seconds=_int_env("KB_PARSE_S3_READY_POLL_INTERVAL_SECONDS", 15),
         )
