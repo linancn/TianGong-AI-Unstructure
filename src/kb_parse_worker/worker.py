@@ -1,4 +1,4 @@
-"""KB parse worker orchestration."""
+"""KB parse and S3-ready worker orchestration."""
 
 from __future__ import annotations
 
@@ -11,9 +11,15 @@ from pathlib import Path
 from . import control_plane, queue
 from .artifacts import write_processed_artifacts
 from .config import WorkerConfig
+from .manifest import load_artifact_info
 from .parser_adapter import parse_with_unstructure_serve
 from .s3_ready import processed_manifest_key, wait_for_s3_processed_ready
-from .snapshot import load_parse_snapshot, resolve_raw_path
+from .snapshot import (
+    load_parse_snapshot,
+    load_s3_ready_snapshot,
+    resolve_raw_path,
+    validate_raw_storage_path,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -121,37 +127,68 @@ class ParseWorker:
         try:
             with LeaseMaintainer(self.config, claimed.job_id) as lease:
                 snapshot = load_parse_snapshot(conn, claimed.job_id)
-                raw_path = resolve_raw_path(snapshot.raw_uri, self.config.nas_raw_root)
-                _validate_raw_file(raw_path, snapshot.file_size, snapshot.sha256)
-                lease.check()
-
-                result = parse_with_unstructure_serve(
-                    raw_path,
-                    self.config.unstructure_serve_url,
-                    self.config.unstructure_serve_bearer_token,
-                )
-                lease.check()
-
-                final_dir, artifact_info = write_processed_artifacts(
-                    result,
-                    snapshot,
-                    self.config.nas_processed_root,
-                    self.config.parser_profile,
-                    self.config.parser_version,
-                )
-                lease.check()
-
-                manifest_local_uri = final_dir.joinpath("manifest.json").as_posix()
-                metadata_json = {
-                    "processed": {
-                        "parser_profile": self.config.parser_profile,
-                        "parser_version": self.config.parser_version,
-                        "chunk_count": artifact_info.chunk_count,
-                        "artifact_uuid": artifact_info.artifact_uuid,
+                if snapshot.processed_manifest_local_uri and snapshot.processed_artifact_uuid:
+                    manifest_path = Path(snapshot.processed_manifest_local_uri)
+                    artifact_info = load_artifact_info(manifest_path, snapshot.processed_manifest_hash)
+                    manifest_local_uri = manifest_path.as_posix()
+                    metadata_json = {
+                        "processed": {
+                            "parser_profile": artifact_info.manifest.get(
+                                "parser_profile",
+                                self.config.parser_profile,
+                            ),
+                            "parser_version": artifact_info.manifest.get(
+                                "parser_version",
+                                self.config.parser_version,
+                            ),
+                            "chunk_count": artifact_info.chunk_count,
+                            "artifact_uuid": artifact_info.artifact_uuid,
+                        }
                     }
-                }
+                else:
+                    raw_path = resolve_raw_path(snapshot.raw_uri, self.config.nas_raw_root)
+                    validate_raw_storage_path(snapshot, raw_path, self.config.nas_raw_root)
+                    _validate_raw_file(raw_path, snapshot.file_size, snapshot.sha256)
+                    lease.check()
 
-                ok = control_plane.mark_parse_local_ready(
+                    result = parse_with_unstructure_serve(
+                        raw_path,
+                        self.config.unstructure_serve_url,
+                        self.config.unstructure_serve_bearer_token,
+                    )
+                    lease.check()
+
+                    final_dir, artifact_info = write_processed_artifacts(
+                        result,
+                        snapshot,
+                        self.config.nas_processed_root,
+                        self.config.parser_profile,
+                        self.config.parser_version,
+                    )
+                    lease.check()
+
+                    manifest_local_uri = final_dir.joinpath("manifest.json").as_posix()
+                    metadata_json = {
+                        "processed": {
+                            "parser_profile": self.config.parser_profile,
+                            "parser_version": self.config.parser_version,
+                            "chunk_count": artifact_info.chunk_count,
+                            "artifact_uuid": artifact_info.artifact_uuid,
+                        }
+                    }
+
+                s3_ready_payload_json = {
+                    "collection_path": snapshot.collection_path,
+                    "collection_storage_path": snapshot.collection_storage_path,
+                    "processed_storage_path": snapshot.processed_storage_path,
+                    "manifest_s3_key": processed_manifest_key(
+                        self.config.s3_processed_prefix,
+                        snapshot,
+                    ),
+                    "s3_bucket": self.config.s3_bucket,
+                    "s3_prefix": self.config.s3_processed_prefix,
+                }
+                s3_ready_result = control_plane.complete_parse_local_ready_and_enqueue_s3_check(
                     conn,
                     claimed.job_id,
                     self.config.worker_id,
@@ -162,9 +199,80 @@ class ParseWorker:
                     artifact_info.manifest_hash,
                     artifact_info.chunk_count,
                     metadata_json,
+                    s3_ready_payload_json,
                 )
-                if not ok:
-                    raise RuntimeError("mark_parse_local_ready returned false")
+                if s3_ready_result is None:
+                    raise RuntimeError("complete_parse_local_ready_and_enqueue_s3_check returned no row")
+                LOGGER.info(
+                    "parse job %s completed local artifacts and queued s3_ready job %s msg %s",
+                    claimed.job_id,
+                    s3_ready_result.s3_ready_job_id,
+                    s3_ready_result.s3_ready_msg_id,
+                )
+                queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
+        except Exception as exc:
+            LOGGER.exception("parse job %s failed", claimed.job_id)
+            retryable = str(exc) not in {
+                "RAW_HASH_MISMATCH",
+                "EMPTY_RESULT",
+            } and not str(exc).startswith("RAW_STORAGE_PATH_MISMATCH")
+            control_plane.fail_job(conn, claimed.job_id, self.config.worker_id, retryable, str(exc))
+
+
+class S3ReadyWorker:
+    def __init__(self, config: WorkerConfig):
+        self.config = config
+
+    def run_forever(self) -> None:
+        while True:
+            processed = self.run_once()
+            if not processed:
+                time.sleep(self.config.poll_interval_seconds)
+
+    def run_once(self) -> bool:
+        with control_plane.connect(self.config.database_url) as conn:
+            message = queue.read_one(
+                conn,
+                self.config.s3_ready_queue_name,
+                self.config.queue_vt_seconds,
+            )
+            if message is None:
+                return False
+            self.process_message(conn, message)
+            return True
+
+    def process_message(self, conn, message: queue.QueueMessage) -> None:
+        claimed = control_plane.claim_job(
+            conn,
+            message.job_id,
+            self.config.s3_ready_queue_name,
+            message.msg_id,
+            self.config.worker_id,
+            self.config.lock_seconds,
+        )
+        if claimed is None:
+            LOGGER.info("s3_ready job %s was not claimable", message.job_id)
+            queue.archive_job_message(conn, message.job_id, self.config.worker_id)
+            return
+        if claimed.stage != "s3_ready":
+            control_plane.fail_job(
+                conn,
+                claimed.job_id,
+                self.config.worker_id,
+                False,
+                "UNSUPPORTED_STAGE",
+                "s3_ready",
+            )
+            queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
+            return
+
+        try:
+            with LeaseMaintainer(self.config, claimed.job_id) as lease:
+                snapshot = load_s3_ready_snapshot(conn, claimed.job_id)
+                if not snapshot.processed_manifest_local_uri:
+                    raise RuntimeError("LOCAL_MANIFEST_MISSING")
+                manifest_path = Path(snapshot.processed_manifest_local_uri)
+                artifact_info = load_artifact_info(manifest_path, snapshot.processed_manifest_hash)
                 lease.check()
 
                 if self.config.s3_ready_mode == "skip":
@@ -178,11 +286,13 @@ class ParseWorker:
                         self.config.s3_bucket,
                         self.config.s3_processed_prefix,
                         self.config.s3_strict_hash,
+                        self.config.s3_ready_timeout_seconds,
+                        self.config.s3_ready_poll_interval_seconds,
                     )
                     manifest_s3_key = ready.manifest_s3_key
                 lease.check()
 
-                ok = control_plane.mark_processed_s3_ready(
+                ok = control_plane.complete_s3_ready_check(
                     conn,
                     claimed.job_id,
                     self.config.worker_id,
@@ -191,13 +301,19 @@ class ParseWorker:
                     manifest_s3_key,
                     artifact_info.manifest_hash,
                     artifact_info.artifact_uuid,
-                    manifest_local_uri,
+                    manifest_path.as_posix(),
                     artifact_info.chunk_count,
                 )
                 if not ok:
-                    raise RuntimeError("mark_processed_s3_ready returned false")
+                    raise RuntimeError("complete_s3_ready_check returned false")
                 queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
         except Exception as exc:
-            LOGGER.exception("parse job %s failed", claimed.job_id)
-            retryable = str(exc) not in {"RAW_HASH_MISMATCH", "EMPTY_RESULT"}
-            control_plane.fail_job(conn, claimed.job_id, self.config.worker_id, retryable, str(exc))
+            LOGGER.exception("s3_ready job %s failed", claimed.job_id)
+            control_plane.fail_job(
+                conn,
+                claimed.job_id,
+                self.config.worker_id,
+                True,
+                str(exc),
+                "s3_ready",
+            )

@@ -12,8 +12,8 @@ checkPaths:
   - requirements.txt
   - src/**
   - docker/**
-lastReviewedAt: 2026-05-05
-lastReviewedCommit: f04e08fbe75d92c5ec518e8f043cdd2045c67bcd
+lastReviewedAt: 2026-05-06
+lastReviewedCommit: 17944cbd8614015728dc20b791a3e34821668234
 ---
 
 # Unstructure Development Runbook
@@ -51,12 +51,14 @@ Run one queue message:
 
 ```bash
 python -m src.kb_parse_worker.cli once
+python -m src.kb_parse_worker.cli once --worker s3-ready
 ```
 
 Run continuously:
 
 ```bash
 python -m src.kb_parse_worker.cli run
+python -m src.kb_parse_worker.cli run --worker s3-ready
 ```
 
 Run continuously under PM2:
@@ -66,9 +68,13 @@ pm2 start ecosystem.kb_parse_worker.json
 pm2 save
 pm2 resurrect
 pm2 logs kb-parse-worker
+pm2 logs kb-s3-ready-worker
 pm2 restart kb-parse-worker
+pm2 restart kb-s3-ready-worker
 pm2 stop kb-parse-worker
+pm2 stop kb-s3-ready-worker
 pm2 delete kb-parse-worker
+pm2 delete kb-s3-ready-worker
 ```
 
 The KB parse worker explicitly loads the repository-local `.env` file before
@@ -85,6 +91,7 @@ NAS_PROCESSED_ROOT
 UNSTRUCTURE_SERVE_URL
 UNSTRUCTURE_SERVE_BEARER_TOKEN
 KB_PROCESSED_S3_BUCKET when overriding the default processed bucket
+KB_S3_READY_QUEUE when overriding the default s3-ready queue
 ```
 
 Current workspace worker deployment points `UNSTRUCTURE_SERVE_URL` at:
@@ -109,10 +116,27 @@ fresh through `heartbeat_job(...)`. The worker defaults to:
 KB_PARSE_HEARTBEAT_INTERVAL_SECONDS=60
 ```
 
-Processed artifact paths are derived from the collection storage path by adding
-`_pickle` to each path segment. For example, collection path
-`/course/thu_humanities` resolves raw files under `course/thu_humanities` and
-processed artifacts under `course_pickle/thu_humanities_pickle`.
+Raw and processed artifact paths are derived from the collection storage path.
+For example, collection path `/course/thu_humanities` resolves raw files under
+`course/thu_humanities/{document_id}{file_ext}` and processed artifacts under
+`course_pickle/thu_humanities_pickle/{document_id}`.
+
+The workers do not upload artifacts to S3 directly. The parse worker writes raw
+inputs and processed artifacts to NAS paths, calls
+`complete_parse_local_ready_and_enqueue_s3_check(...)`, archives the parse queue
+message, and exits without waiting for NAS-to-S3 sync. The S3-ready worker then
+waits for the NAS sync layer to publish processed artifacts to S3 before calling
+`complete_s3_ready_check(...)`. Tune the S3-ready worker check wait window with:
+
+```text
+KB_PARSE_S3_READY_TIMEOUT_SECONDS=900
+KB_PARSE_S3_READY_POLL_INTERVAL_SECONDS=15
+```
+
+For deployments where NAS-to-S3 sync can take a long time, keep the parse worker
+and S3-ready worker as separate PM2 processes. Retry attempts for the S3-ready
+stage reuse `processed_manifest_local_uri` and only re-check processed S3
+readiness; they do not parse the document again.
 
 Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3
 sync is intentionally unavailable.

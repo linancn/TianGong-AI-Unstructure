@@ -16,6 +16,23 @@
       "error_file": "logs/kb-parse-worker.err.log",
       "merge_logs": true,
       "time": true
+    },
+    {
+      "name": "kb-s3-ready-worker",
+      "cwd": ".",
+      "script": ".venv/bin/python",
+      "interpreter": "none",
+      "args": "-m src.kb_parse_worker.cli run --worker s3-ready --log-level INFO",
+      "watch": false,
+      "autorestart": true,
+      "max_restarts": 10,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "out_file": "logs/kb-s3-ready-worker.out.log",
+      "error_file": "logs/kb-s3-ready-worker.err.log",
+      "merge_logs": true,
+      "time": true
     }
   ]
 }

@@ -13,6 +13,7 @@ class ParseSnapshot:
     job_id: str
     document_id: str
     document_version: int
+    document_status: str
     raw_uri: str
     raw_storage_region: str | None
     file_ext: str | None
@@ -28,6 +29,21 @@ class ParseSnapshot:
     collection_metadata_schema_json: dict
     document_metadata_json: dict
     job_payload_json: dict
+    processed_manifest_local_uri: str | None
+    processed_manifest_hash: str | None
+    processed_artifact_uuid: str | None
+    chunk_count: int | None
+
+
+def _safe_file_ext(file_ext: str | None, original_filename: str) -> str:
+    ext = file_ext or Path(original_filename).suffix
+    if not ext:
+        raise ValueError("document file extension is required for raw storage path")
+    if not ext.startswith("."):
+        ext = f".{ext}"
+    if "/" in ext or "\\" in ext or ext in {".", ".."}:
+        raise ValueError(f"unsafe document file extension: {ext}")
+    return ext
 
 
 def collection_storage_path(collection_path: str) -> str:
@@ -47,7 +63,12 @@ def processed_storage_path(collection_storage_path: str) -> str:
     return "/".join(part if part.endswith("_pickle") else f"{part}_pickle" for part in parts)
 
 
-def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
+def raw_storage_path(snapshot: ParseSnapshot) -> str:
+    ext = _safe_file_ext(snapshot.file_ext, snapshot.original_filename)
+    return f"{snapshot.collection_storage_path}/{snapshot.document_id}{ext}"
+
+
+def load_job_snapshot(conn, job_id: str, expected_stage: str) -> ParseSnapshot:
     import psycopg2.extras
 
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -57,6 +78,7 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
               j.id as job_id,
               j.payload_json as job_payload_json,
               d.id as document_id,
+              d.status as document_status,
               d.document_version,
               d.raw_uri,
               d.raw_storage_region,
@@ -66,6 +88,10 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
               d.original_filename,
               d.primary_collection_id,
               d.metadata_json as document_metadata_json,
+              d.processed_manifest_local_uri,
+              d.processed_manifest_hash,
+              d.processed_artifact_uuid,
+              d.chunk_count,
               c.name as collection_name,
               c.path as collection_path,
               c.content_type,
@@ -74,16 +100,16 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
             join public.kb_documents d on d.id = j.document_id
             join public.kb_collections c on c.id = d.primary_collection_id
             where j.id = %s
-              and j.stage = 'parse'
+              and j.stage = %s::public.kb_job_stage
               and j.status = 'running'
               and d.deleted_at is null
               and j.document_version = d.document_version
             """,
-            (job_id,),
+            (job_id, expected_stage),
         )
         row = cur.fetchone()
     if row is None:
-        raise RuntimeError(f"No runnable parse snapshot for job {job_id}.")
+        raise RuntimeError(f"No runnable {expected_stage} snapshot for job {job_id}.")
     if not row["raw_uri"]:
         raise RuntimeError(f"Document {row['document_id']} has no raw_uri.")
 
@@ -93,6 +119,7 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
         job_id=str(row["job_id"]),
         document_id=str(row["document_id"]),
         document_version=int(row["document_version"]),
+        document_status=str(row["document_status"]),
         raw_uri=str(row["raw_uri"]),
         raw_storage_region=row["raw_storage_region"],
         file_ext=row["file_ext"],
@@ -108,7 +135,21 @@ def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
         collection_metadata_schema_json=dict(row["collection_metadata_schema_json"] or {}),
         document_metadata_json=dict(row["document_metadata_json"] or {}),
         job_payload_json=dict(row["job_payload_json"] or {}),
+        processed_manifest_local_uri=row["processed_manifest_local_uri"],
+        processed_manifest_hash=row["processed_manifest_hash"],
+        processed_artifact_uuid=str(row["processed_artifact_uuid"])
+        if row["processed_artifact_uuid"]
+        else None,
+        chunk_count=row["chunk_count"],
     )
+
+
+def load_parse_snapshot(conn, job_id: str) -> ParseSnapshot:
+    return load_job_snapshot(conn, job_id, "parse")
+
+
+def load_s3_ready_snapshot(conn, job_id: str) -> ParseSnapshot:
+    return load_job_snapshot(conn, job_id, "s3_ready")
 
 
 def resolve_raw_path(raw_uri: str, nas_raw_root: Path) -> Path:
@@ -125,3 +166,12 @@ def resolve_raw_path(raw_uri: str, nas_raw_root: Path) -> Path:
             rel = rel[len("raw/") :]
         return nas_raw_root / rel
     raise ValueError(f"Unsupported raw_uri scheme: {parsed.scheme}")
+
+
+def validate_raw_storage_path(snapshot: ParseSnapshot, raw_path: Path, nas_raw_root: Path) -> None:
+    expected = nas_raw_root / raw_storage_path(snapshot)
+    if raw_path.resolve() != expected.resolve():
+        raise RuntimeError(
+            "RAW_STORAGE_PATH_MISMATCH: "
+            f"expected {expected.as_posix()} from collection path {snapshot.collection_path}"
+        )
