@@ -57,6 +57,10 @@ the referenced files still exist.
   `jsonl`/`pkl`/`manifest.json` artifacts under the configured NAS processed
   root using a `_pickle` suffixed path derived from the collection storage
   path, and calls `complete_parse_local_ready_and_enqueue_s3_check(...)`.
+  Before artifact writes, the worker embeds every chunk `text` field through the
+  OpenAI-compatible Qwen3-Embedding-8B endpoint, locally truncates and
+  normalizes vectors to 1536 dimensions, stores vectors in the pickle chunks
+  under `embedding`, and excludes `embedding` from the JSONL artifact.
   That RPC completes the parse job, leaves the document in `s3_sync_pending`,
   and enqueues a durable `s3_ready` job. A separate S3-ready worker then
   verifies the processed manifest/jsonl/pkl objects after NAS-to-S3 sync and

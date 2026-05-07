@@ -11,6 +11,7 @@ from pathlib import Path
 from . import control_plane, queue
 from .artifacts import write_processed_artifacts
 from .config import WorkerConfig
+from .embedding_client import add_chunk_embeddings
 from .manifest import load_artifact_info
 from .parser_adapter import parse_with_unstructure_serve
 from .s3_ready import processed_manifest_key, wait_for_s3_processed_ready
@@ -158,12 +159,31 @@ class ParseWorker:
                     )
                     lease.check()
 
+                    result = add_chunk_embeddings(
+                        result,
+                        self.config.embedding_base_url,
+                        self.config.embedding_model,
+                        self.config.embedding_api_key,
+                        self.config.embedding_dimensions,
+                        self.config.embedding_batch_size,
+                        self.config.embedding_timeout_seconds,
+                    )
+                    lease.check()
+
+                    embedding_metadata = {
+                        "model": self.config.embedding_model,
+                        "base_url": self.config.embedding_base_url,
+                        "dimensions": self.config.embedding_dimensions,
+                        "normalized": True,
+                        "source_dimensions": "provider_default",
+                    }
                     final_dir, artifact_info = write_processed_artifacts(
                         result,
                         snapshot,
                         self.config.nas_processed_root,
                         self.config.parser_profile,
                         self.config.parser_version,
+                        embedding_metadata,
                     )
                     lease.check()
 
@@ -174,6 +194,7 @@ class ParseWorker:
                             "parser_version": self.config.parser_version,
                             "chunk_count": artifact_info.chunk_count,
                             "artifact_uuid": artifact_info.artifact_uuid,
+                            "embedding": embedding_metadata,
                         }
                     }
 

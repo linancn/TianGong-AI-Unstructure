@@ -80,6 +80,24 @@ pm2 delete kb-s3-ready-worker
 The KB parse worker explicitly loads the repository-local `.env` file before
 falling back to the default `.env` lookup, so it can be started from either the
 repository root or the workspace root.
+
+Current workspace live F03 workers run on the self-hosted parse worker host,
+not on the local operator machine. The worker host is the machine that can read
+`NAS_RAW_ROOT`, write `NAS_PROCESSED_ROOT`, reach Supabase Postgres, and call
+Unstructure-Serve. Operator-side variables such as `PARSE_WORKER_HOST`,
+`PARSE_WORKER_SSH_PORT`, `PARSE_WORKER_USER`, `PARSE_WORKER_SSH_HOST_ALIAS`,
+`SUPABASE_DB_*`, `NAS_*`, `UNSTRUCTURE_SERVE_*`, `KB_PROCESSED_S3_*`, and AWS
+credentials, plus `KB_EMBEDDING_*`, are loaded from the root workspace
+`.env.ops.local` only for manual operations, SSH login, and smoke-test
+preparation. Do not treat root
+`.env.ops.local` as worker runtime configuration and do not copy secret values
+into docs, issues, PRs, or chat.
+
+The remote worker runtime must receive the required values from the remote
+`TianGong-AI-Unstructure/.env` file or host process environment. Run live
+`once`, `run`, PM2 restart, and S3-ready checks on that remote host unless the
+local machine has an equivalent NAS mount and the same runtime variables.
+
 Required runtime variables:
 
 ```text
@@ -90,6 +108,8 @@ NAS_RAW_ROOT
 NAS_PROCESSED_ROOT
 UNSTRUCTURE_SERVE_URL
 UNSTRUCTURE_SERVE_BEARER_TOKEN
+KB_EMBEDDING_BASE_URL
+KB_EMBEDDING_MODEL
 KB_PROCESSED_S3_BUCKET when overriding the default processed bucket
 KB_S3_READY_QUEUE when overriding the default s3-ready queue
 ```
@@ -98,6 +118,22 @@ Current workspace worker deployment points `UNSTRUCTURE_SERVE_URL` at:
 
 ```text
 UNSTRUCTURE_SERVE_URL=http://192.168.1.140:7770/mineru_with_images
+```
+
+After MinerU returns chunks, the parse worker calls the OpenAI-compatible
+embedding endpoint before writing artifacts. The pickle artifact stores each
+chunk with an `embedding` key, while the JSONL artifact omits embeddings to keep
+line-oriented inspection light. The worker requests provider-default
+Qwen3-Embedding-8B vectors, then locally truncates and normalizes them to the
+configured dimension:
+
+```text
+KB_EMBEDDING_BASE_URL=http://192.168.1.140:7710/v1
+KB_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
+KB_EMBEDDING_API_KEY=EMPTY
+KB_EMBEDDING_DIMENSIONS=1536
+KB_EMBEDDING_BATCH_SIZE=32
+KB_EMBEDDING_TIMEOUT_SECONDS=600
 ```
 
 Current workspace design documents point the processed S3 location at bucket
