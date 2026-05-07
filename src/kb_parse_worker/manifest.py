@@ -42,6 +42,7 @@ def build_manifest(
     pkl_path: Path,
     parser_profile: str,
     parser_version: str,
+    embedding: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     jsonl_name = jsonl_path.name
     pkl_name = pkl_path.name
@@ -71,6 +72,8 @@ def build_manifest(
         "parser_profile": parser_profile,
         "parser_version": parser_version,
     }
+    if embedding is not None:
+        manifest["embedding"] = embedding
     manifest_bytes = json.dumps(manifest, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return manifest, hashlib.sha256(manifest_bytes).hexdigest()
 

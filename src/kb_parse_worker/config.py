@@ -78,6 +78,12 @@ class WorkerConfig:
     s3_strict_hash: bool
     s3_ready_timeout_seconds: int
     s3_ready_poll_interval_seconds: int
+    embedding_base_url: str
+    embedding_model: str
+    embedding_api_key: str
+    embedding_dimensions: int
+    embedding_batch_size: int
+    embedding_timeout_seconds: int
 
     @classmethod
     def from_env(cls) -> "WorkerConfig":
@@ -117,4 +123,10 @@ class WorkerConfig:
             s3_strict_hash=_bool_env("KB_PARSE_S3_STRICT_HASH", False),
             s3_ready_timeout_seconds=_int_env("KB_PARSE_S3_READY_TIMEOUT_SECONDS", 900),
             s3_ready_poll_interval_seconds=_int_env("KB_PARSE_S3_READY_POLL_INTERVAL_SECONDS", 15),
+            embedding_base_url=os.getenv("KB_EMBEDDING_BASE_URL", "http://192.168.1.140:7710/v1"),
+            embedding_model=os.getenv("KB_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B"),
+            embedding_api_key=os.getenv("KB_EMBEDDING_API_KEY", "EMPTY"),
+            embedding_dimensions=_int_env("KB_EMBEDDING_DIMENSIONS", 1536),
+            embedding_batch_size=_int_env("KB_EMBEDDING_BATCH_SIZE", 32),
+            embedding_timeout_seconds=_int_env("KB_EMBEDDING_TIMEOUT_SECONDS", 600),
         )

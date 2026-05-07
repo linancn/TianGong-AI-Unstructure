@@ -31,6 +31,7 @@ def write_processed_artifacts(
     nas_processed_root: Path,
     parser_profile: str,
     parser_version: str,
+    embedding: dict[str, Any] | None = None,
 ) -> tuple[Path, ArtifactInfo]:
     if not result:
         raise ValueError("EMPTY_RESULT")
@@ -47,6 +48,8 @@ def write_processed_artifacts(
     pkl_path = tmp_dir / f"{artifact_uuid}.pkl"
     with jsonl_path.open("w", encoding="utf-8") as handle:
         for item in result:
+            if isinstance(item, dict) and "embedding" in item:
+                item = {key: value for key, value in item.items() if key != "embedding"}
             handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
     with pkl_path.open("wb") as handle:
         pickle.dump(result, handle)
@@ -66,6 +69,7 @@ def write_processed_artifacts(
         pkl_path=pkl_path,
         parser_profile=parser_profile,
         parser_version=parser_version,
+        embedding=embedding,
     )
     write_manifest(tmp_dir / "manifest.tmp.json", manifest)
     os.replace(tmp_dir / "manifest.tmp.json", tmp_dir / "manifest.json")
