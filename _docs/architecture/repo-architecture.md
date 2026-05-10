@@ -11,8 +11,8 @@ checkPaths:
   - src/**
   - docker/**
   - requirements.txt
-lastReviewedAt: 2026-05-06
-lastReviewedCommit: 17944cbd8614015728dc20b791a3e34821668234
+lastReviewedAt: 2026-05-10
+lastReviewedCommit: 163c1c726891c17cba2ef3442e96b92af593ef6b
 ---
 
 # Unstructure Architecture
@@ -54,16 +54,19 @@ the referenced files still exist.
 - The KB parse worker reads raw document locations from `kb_documents.raw_uri`,
   requires raw files to live under the collection-derived storage path using
   the renamed canonical filename `{document_id}{file_ext}`, writes processed
-  `jsonl`/`pkl`/`manifest.json` artifacts under the configured NAS processed
-  root using a `_pickle` suffixed path derived from the collection storage
-  path, and calls `complete_parse_local_ready_and_enqueue_s3_check(...)`.
-  Before artifact writes, the worker embeds every chunk `text` field through the
-  OpenAI-compatible Qwen3-Embedding-8B endpoint, locally truncates and
-  normalizes vectors to 1536 dimensions, stores vectors in the pickle chunks
+  `jsonl`/`pkl`/`txt`/`manifest.json` artifacts under the configured NAS
+  processed root using a `_pickle` suffixed path derived from the collection
+  storage path, and calls `complete_parse_local_ready_and_enqueue_s3_check(...)`.
+  The worker requests `return_txt=true` from Unstructure-Serve, drops parser
+  chunks whose `text` is empty before embedding, and writes the returned
+  whole-document text as `{artifact_uuid}.txt` beside the pickle artifact.
+  Before artifact writes, the worker embeds every remaining chunk `text` field
+  through the OpenAI-compatible Qwen3-Embedding-8B endpoint, locally truncates
+  and normalizes vectors to 1536 dimensions, stores vectors in the pickle chunks
   under `embedding`, and excludes `embedding` from the JSONL artifact.
   That RPC completes the parse job, leaves the document in `s3_sync_pending`,
   and enqueues a durable `s3_ready` job. A separate S3-ready worker then
-  verifies the processed manifest/jsonl/pkl objects after NAS-to-S3 sync and
+  verifies the processed manifest/jsonl/pkl/txt objects after NAS-to-S3 sync and
   calls `complete_s3_ready_check(...)` to mark `processed_s3_ready`. PM2 keeps
   both long-running worker processes resident; each worker's heartbeat loop
   keeps its active job lock and PGMQ visibility timeout fresh.

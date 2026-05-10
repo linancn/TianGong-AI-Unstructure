@@ -152,11 +152,19 @@ class ParseWorker:
                     _validate_raw_file(raw_path, snapshot.file_size, snapshot.sha256)
                     lease.check()
 
-                    result = parse_with_unstructure_serve(
+                    parsed = parse_with_unstructure_serve(
                         raw_path,
                         self.config.unstructure_serve_url,
                         self.config.unstructure_serve_bearer_token,
                     )
+                    result = parsed.result
+                    if parsed.dropped_empty_text_count:
+                        LOGGER.info(
+                            "parse job %s dropped %s empty text chunk(s) from %s parser chunk(s)",
+                            claimed.job_id,
+                            parsed.dropped_empty_text_count,
+                            parsed.original_chunk_count,
+                        )
                     lease.check()
 
                     result = add_chunk_embeddings(
@@ -184,6 +192,7 @@ class ParseWorker:
                         self.config.parser_profile,
                         self.config.parser_version,
                         embedding_metadata,
+                        parsed.txt,
                     )
                     lease.check()
 
@@ -194,6 +203,8 @@ class ParseWorker:
                             "parser_version": self.config.parser_version,
                             "chunk_count": artifact_info.chunk_count,
                             "artifact_uuid": artifact_info.artifact_uuid,
+                            "source_chunk_count": parsed.original_chunk_count,
+                            "dropped_empty_text_count": parsed.dropped_empty_text_count,
                             "embedding": embedding_metadata,
                         }
                     }
