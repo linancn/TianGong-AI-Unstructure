@@ -12,8 +12,8 @@ checkPaths:
   - requirements.txt
   - src/**
   - docker/**
-lastReviewedAt: 2026-05-06
-lastReviewedCommit: 17944cbd8614015728dc20b791a3e34821668234
+lastReviewedAt: 2026-05-10
+lastReviewedCommit: 163c1c726891c17cba2ef3442e96b92af593ef6b
 ---
 
 # Unstructure Development Runbook
@@ -120,12 +120,18 @@ Current workspace worker deployment points `UNSTRUCTURE_SERVE_URL` at:
 UNSTRUCTURE_SERVE_URL=http://192.168.1.140:7770/mineru_with_images
 ```
 
+The parse worker calls Unstructure-Serve with `return_txt=true`. It uses the
+returned `result` JSON for chunk embeddings and pickle generation, drops any
+returned chunk whose `text` is empty before embedding, and writes the returned
+whole-document `txt` payload as `{artifact_uuid}.txt` beside
+`{artifact_uuid}.pkl`.
+
 After MinerU returns chunks, the parse worker calls the OpenAI-compatible
 embedding endpoint before writing artifacts. The pickle artifact stores each
-chunk with an `embedding` key, while the JSONL artifact omits embeddings to keep
-line-oriented inspection light. The worker requests provider-default
-Qwen3-Embedding-8B vectors, then locally truncates and normalizes them to the
-configured dimension:
+remaining chunk with an `embedding` key, while the JSONL artifact omits
+embeddings to keep line-oriented inspection light. The worker requests
+provider-default Qwen3-Embedding-8B vectors, then locally truncates and
+normalizes them to the configured dimension:
 
 ```text
 KB_EMBEDDING_BASE_URL=http://192.168.1.140:7710/v1
@@ -158,7 +164,8 @@ For example, collection path `/course/thu_humanities` resolves raw files under
 `course_pickle/thu_humanities_pickle/{document_id}`.
 
 The workers do not upload artifacts to S3 directly. The parse worker writes raw
-inputs and processed artifacts to NAS paths, calls
+inputs and processed artifacts to NAS paths, including the manifest-declared
+JSONL, pickle, and optional full-text TXT artifacts, calls
 `complete_parse_local_ready_and_enqueue_s3_check(...)`, archives the parse queue
 message, and exits without waiting for NAS-to-S3 sync. The S3-ready worker then
 waits for the NAS sync layer to publish processed artifacts to S3 before calling

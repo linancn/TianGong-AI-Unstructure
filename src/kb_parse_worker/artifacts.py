@@ -32,6 +32,7 @@ def write_processed_artifacts(
     parser_profile: str,
     parser_version: str,
     embedding: dict[str, Any] | None = None,
+    full_text: str | None = None,
 ) -> tuple[Path, ArtifactInfo]:
     if not result:
         raise ValueError("EMPTY_RESULT")
@@ -46,6 +47,7 @@ def write_processed_artifacts(
 
     jsonl_path = tmp_dir / f"{artifact_uuid}.jsonl"
     pkl_path = tmp_dir / f"{artifact_uuid}.pkl"
+    txt_path = tmp_dir / f"{artifact_uuid}.txt" if full_text is not None else None
     with jsonl_path.open("w", encoding="utf-8") as handle:
         for item in result:
             if isinstance(item, dict) and "embedding" in item:
@@ -53,8 +55,12 @@ def write_processed_artifacts(
             handle.write(json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n")
     with pkl_path.open("wb") as handle:
         pickle.dump(result, handle)
+    if txt_path is not None:
+        txt_path.write_text(full_text, encoding="utf-8")
 
-    if sum(1 for _ in jsonl_path.open("r", encoding="utf-8")) != len(result):
+    with jsonl_path.open("r", encoding="utf-8") as handle:
+        jsonl_row_count = sum(1 for _ in handle)
+    if jsonl_row_count != len(result):
         raise RuntimeError("ARTIFACT_VALIDATE_FAILED: jsonl row count mismatch")
     with pkl_path.open("rb") as handle:
         pickle.load(handle)
@@ -67,6 +73,7 @@ def write_processed_artifacts(
         chunk_count=len(result),
         jsonl_path=jsonl_path,
         pkl_path=pkl_path,
+        txt_path=txt_path,
         parser_profile=parser_profile,
         parser_version=parser_version,
         embedding=embedding,
@@ -81,10 +88,13 @@ def write_processed_artifacts(
         chunk_count=len(result),
         jsonl_name=jsonl_path.name,
         pkl_name=pkl_path.name,
+        txt_name=txt_path.name if txt_path is not None else None,
         jsonl_sha256=manifest["sha256"]["chunks_jsonl"],
         pkl_sha256=manifest["sha256"]["chunks_pkl"],
+        txt_sha256=manifest["sha256"].get("full_text_txt"),
         jsonl_size_bytes=manifest["size_bytes"]["chunks_jsonl"],
         pkl_size_bytes=manifest["size_bytes"]["chunks_pkl"],
+        txt_size_bytes=manifest["size_bytes"].get("full_text_txt"),
         manifest_hash=manifest_hash,
         manifest=manifest,
     )
