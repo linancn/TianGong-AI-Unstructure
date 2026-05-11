@@ -27,6 +27,13 @@ class S3ReadyEnqueueResult:
     document_status: str
 
 
+@dataclass(frozen=True)
+class FailJobResult:
+    job_id: str
+    job_status: str
+    document_status: str
+
+
 def connect(database_url: str):
     return psycopg2.connect(database_url)
 
@@ -85,13 +92,21 @@ def fail_job(
     retryable: bool,
     error: str,
     error_stage: str = "parse",
-) -> None:
-    with conn.cursor() as cur:
+) -> FailJobResult | None:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             "select * from public.fail_job(%s, %s, %s, %s, %s)",
             (job_id, worker_id, retryable, error[:2000], error_stage),
         )
+        row = cur.fetchone()
     conn.commit()
+    if row is None:
+        return None
+    return FailJobResult(
+        job_id=str(row["job_id"]),
+        job_status=str(row["job_status"]),
+        document_status=str(row["document_status"]),
+    )
 
 
 def mark_parse_local_ready(

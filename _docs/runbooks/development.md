@@ -156,6 +156,7 @@ fresh through `heartbeat_job(...)`. The worker defaults to:
 
 ```text
 KB_PARSE_HEARTBEAT_INTERVAL_SECONDS=60
+KB_PARSE_JOB_TIMEOUT_SECONDS=7200
 ```
 
 Raw and processed artifact paths are derived from the collection storage path.
@@ -174,12 +175,23 @@ waits for the NAS sync layer to publish processed artifacts to S3 before calling
 ```text
 KB_PARSE_S3_READY_TIMEOUT_SECONDS=900
 KB_PARSE_S3_READY_POLL_INTERVAL_SECONDS=15
+KB_PARSE_S3_READY_JOB_TIMEOUT_SECONDS=1200
 ```
 
 For deployments where NAS-to-S3 sync can take a long time, keep the parse worker
 and S3-ready worker as separate PM2 processes. Retry attempts for the S3-ready
 stage reuse `processed_manifest_local_uri` and only re-check processed S3
 readiness; they do not parse the document again.
+
+Worker failures are classified before calling `fail_job(...)`. Terminal parse
+failures such as `RAW_HASH_MISMATCH`, `RAW_STORAGE_PATH_MISMATCH`, malformed
+parser responses, empty parse results, and embedding schema/dimension errors are
+reported with `retryable=false`. Transient parser, embedding, DB, timeout, and
+network failures remain retryable. Terminal S3-ready failures include missing
+local manifests, manifest identity mismatches, and strict sha256 artifact
+mismatches; ordinary S3 sync delays remain retryable. When `fail_job(...)`
+returns `dead`, the worker archives the PGMQ message immediately so a terminal
+document does not keep resurfacing after the visibility timeout.
 
 Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3
 sync is intentionally unavailable.
