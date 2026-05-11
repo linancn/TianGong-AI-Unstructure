@@ -8,12 +8,14 @@ import threading
 import time
 from pathlib import Path
 
+import requests
+
 from . import control_plane, queue
 from .artifacts import write_processed_artifacts
 from .config import WorkerConfig
-from .embedding_client import add_chunk_embeddings
+from .embedding_client import EmbeddingError, add_chunk_embeddings
 from .manifest import load_artifact_info
-from .parser_adapter import parse_with_unstructure_serve
+from .parser_adapter import ParserError, parse_with_unstructure_serve
 from .s3_ready import processed_manifest_key, wait_for_s3_processed_ready
 from .snapshot import (
     load_parse_snapshot,
@@ -23,6 +25,99 @@ from .snapshot import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+class JobTimeout(RuntimeError):
+    pass
+
+
+class JobDeadline:
+    def __init__(self, stage: str, timeout_seconds: int):
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        self.stage = stage
+        self.timeout_seconds = timeout_seconds
+        self.deadline = time.monotonic() + timeout_seconds
+
+    def check(self) -> None:
+        if time.monotonic() >= self.deadline:
+            raise JobTimeout(f"{self.stage.upper()}_JOB_TIMEOUT_AFTER_{self.timeout_seconds}s")
+
+    def remaining_seconds(self, maximum: int | None = None) -> int:
+        self.check()
+        remaining = max(1, int(self.deadline - time.monotonic()))
+        if maximum is not None:
+            return max(1, min(maximum, remaining))
+        return remaining
+
+
+def _http_status_from_message(prefix: str, message: str) -> int | None:
+    if not message.startswith(prefix):
+        return None
+    try:
+        return int(message.removeprefix(prefix).split(":", 1)[0].strip())
+    except ValueError:
+        return None
+
+
+def _is_retryable_http_status(status: int | None) -> bool:
+    return status is not None and (status == 429 or status >= 500)
+
+
+def is_parse_failure_retryable(error: Exception) -> bool:
+    if isinstance(error, JobTimeout):
+        return True
+    if isinstance(error, requests.RequestException):
+        return True
+
+    message = str(error)
+    if message in {"RAW_HASH_MISMATCH", "EMPTY_RESULT", "EMBEDDING_CHUNK_NOT_OBJECT"}:
+        return False
+    if message.startswith("RAW_STORAGE_PATH_MISMATCH"):
+        return False
+    if message.startswith("EMBEDDING_DIMENSION_TOO_SMALL"):
+        return False
+    if message.startswith("parser response ") or message.startswith("parser result "):
+        return False
+    if message.startswith("embedding response "):
+        return False
+
+    if isinstance(error, ParserError):
+        return _is_retryable_http_status(_http_status_from_message("parser http error ", message))
+    if isinstance(error, EmbeddingError):
+        status = _http_status_from_message("embedding http error ", message)
+        return status is None or _is_retryable_http_status(status)
+
+    return True
+
+
+def is_s3_ready_failure_retryable(error: Exception) -> bool:
+    if isinstance(error, JobTimeout):
+        return True
+
+    message = str(error)
+    if message in {"LOCAL_MANIFEST_MISSING"}:
+        return False
+    if "S3_MANIFEST_MISMATCH" in message:
+        return False
+    if "S3_ARTIFACT_MISMATCH" in message and "sha256" in message:
+        return False
+
+    return True
+
+
+def fail_job_and_archive_if_dead(
+    conn,
+    job_id: str,
+    worker_id: str,
+    retryable: bool,
+    error: str,
+    error_stage: str,
+) -> control_plane.FailJobResult | None:
+    result = control_plane.fail_job(conn, job_id, worker_id, retryable, error, error_stage)
+    if result is not None and result.job_status == "dead":
+        queue.archive_job_message(conn, job_id, worker_id)
+    return result
 
 
 def _sha256(path: Path) -> str:
@@ -121,12 +216,20 @@ class ParseWorker:
             queue.archive_job_message(conn, message.job_id, self.config.worker_id)
             return
         if claimed.stage != "parse":
-            control_plane.fail_job(conn, claimed.job_id, self.config.worker_id, False, "UNSUPPORTED_STAGE")
-            queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
+            fail_job_and_archive_if_dead(
+                conn,
+                claimed.job_id,
+                self.config.worker_id,
+                False,
+                "UNSUPPORTED_STAGE",
+                "parse",
+            )
             return
 
         try:
             with LeaseMaintainer(self.config, claimed.job_id) as lease:
+                deadline = JobDeadline("parse", self.config.parse_job_timeout_seconds)
+                deadline.check()
                 snapshot = load_parse_snapshot(conn, claimed.job_id)
                 if snapshot.processed_manifest_local_uri and snapshot.processed_artifact_uuid:
                     manifest_path = Path(snapshot.processed_manifest_local_uri)
@@ -147,15 +250,20 @@ class ParseWorker:
                         }
                     }
                 else:
+                    deadline.check()
                     raw_path = resolve_raw_path(snapshot.raw_uri, self.config.nas_raw_root)
                     validate_raw_storage_path(snapshot, raw_path, self.config.nas_raw_root)
                     _validate_raw_file(raw_path, snapshot.file_size, snapshot.sha256)
                     lease.check()
+                    deadline.check()
 
                     parsed = parse_with_unstructure_serve(
                         raw_path,
                         self.config.unstructure_serve_url,
                         self.config.unstructure_serve_bearer_token,
+                        timeout_seconds=deadline.remaining_seconds(
+                            self.config.parse_job_timeout_seconds
+                        ),
                     )
                     result = parsed.result
                     if parsed.dropped_empty_text_count:
@@ -166,6 +274,7 @@ class ParseWorker:
                             parsed.original_chunk_count,
                         )
                     lease.check()
+                    deadline.check()
 
                     result = add_chunk_embeddings(
                         result,
@@ -174,9 +283,11 @@ class ParseWorker:
                         self.config.embedding_api_key,
                         self.config.embedding_dimensions,
                         self.config.embedding_batch_size,
-                        self.config.embedding_timeout_seconds,
+                        deadline.remaining_seconds(self.config.embedding_timeout_seconds),
+                        deadline.check,
                     )
                     lease.check()
+                    deadline.check()
 
                     embedding_metadata = {
                         "model": self.config.embedding_model,
@@ -195,6 +306,7 @@ class ParseWorker:
                         parsed.txt,
                     )
                     lease.check()
+                    deadline.check()
 
                     manifest_local_uri = final_dir.joinpath("manifest.json").as_posix()
                     metadata_json = {
@@ -244,11 +356,15 @@ class ParseWorker:
                 queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
         except Exception as exc:
             LOGGER.exception("parse job %s failed", claimed.job_id)
-            retryable = str(exc) not in {
-                "RAW_HASH_MISMATCH",
-                "EMPTY_RESULT",
-            } and not str(exc).startswith("RAW_STORAGE_PATH_MISMATCH")
-            control_plane.fail_job(conn, claimed.job_id, self.config.worker_id, retryable, str(exc))
+            retryable = is_parse_failure_retryable(exc)
+            fail_job_and_archive_if_dead(
+                conn,
+                claimed.job_id,
+                self.config.worker_id,
+                retryable,
+                str(exc),
+                "parse",
+            )
 
 
 class S3ReadyWorker:
@@ -287,7 +403,7 @@ class S3ReadyWorker:
             queue.archive_job_message(conn, message.job_id, self.config.worker_id)
             return
         if claimed.stage != "s3_ready":
-            control_plane.fail_job(
+            fail_job_and_archive_if_dead(
                 conn,
                 claimed.job_id,
                 self.config.worker_id,
@@ -295,17 +411,19 @@ class S3ReadyWorker:
                 "UNSUPPORTED_STAGE",
                 "s3_ready",
             )
-            queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
             return
 
         try:
             with LeaseMaintainer(self.config, claimed.job_id) as lease:
+                deadline = JobDeadline("s3_ready", self.config.s3_ready_job_timeout_seconds)
+                deadline.check()
                 snapshot = load_s3_ready_snapshot(conn, claimed.job_id)
                 if not snapshot.processed_manifest_local_uri:
                     raise RuntimeError("LOCAL_MANIFEST_MISSING")
                 manifest_path = Path(snapshot.processed_manifest_local_uri)
                 artifact_info = load_artifact_info(manifest_path, snapshot.processed_manifest_hash)
                 lease.check()
+                deadline.check()
 
                 if self.config.s3_ready_mode == "skip":
                     manifest_s3_key = processed_manifest_key(self.config.s3_processed_prefix, snapshot)
@@ -318,11 +436,12 @@ class S3ReadyWorker:
                         self.config.s3_bucket,
                         self.config.s3_processed_prefix,
                         self.config.s3_strict_hash,
-                        self.config.s3_ready_timeout_seconds,
+                        deadline.remaining_seconds(self.config.s3_ready_timeout_seconds),
                         self.config.s3_ready_poll_interval_seconds,
                     )
                     manifest_s3_key = ready.manifest_s3_key
                 lease.check()
+                deadline.check()
 
                 ok = control_plane.complete_s3_ready_check(
                     conn,
@@ -341,11 +460,12 @@ class S3ReadyWorker:
                 queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
         except Exception as exc:
             LOGGER.exception("s3_ready job %s failed", claimed.job_id)
-            control_plane.fail_job(
+            retryable = is_s3_ready_failure_retryable(exc)
+            fail_job_and_archive_if_dead(
                 conn,
                 claimed.job_id,
                 self.config.worker_id,
-                True,
+                retryable,
                 str(exc),
                 "s3_ready",
             )

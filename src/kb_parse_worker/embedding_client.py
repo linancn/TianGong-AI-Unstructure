@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -94,6 +95,7 @@ def add_chunk_embeddings(
     dimensions: int,
     batch_size: int,
     timeout_seconds: int,
+    deadline_check: Callable[[], None] | None = None,
 ) -> list[dict[str, Any]]:
     if dimensions <= 0:
         raise ValueError("KB_EMBEDDING_DIMENSIONS must be positive")
@@ -103,6 +105,8 @@ def add_chunk_embeddings(
     texts = [_chunk_text(item) for item in chunks]
     embedded_chunks: list[dict[str, Any]] = []
     for offset in range(0, len(chunks), batch_size):
+        if deadline_check is not None:
+            deadline_check()
         batch_chunks = chunks[offset : offset + batch_size]
         batch_texts = texts[offset : offset + batch_size]
         vectors = _embed_text_batch(
@@ -117,4 +121,6 @@ def add_chunk_embeddings(
             chunk = dict(item)
             chunk["embedding"] = vector
             embedded_chunks.append(chunk)
+        if deadline_check is not None:
+            deadline_check()
     return embedded_chunks

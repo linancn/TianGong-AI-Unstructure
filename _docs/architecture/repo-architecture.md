@@ -69,6 +69,10 @@ the referenced files still exist.
   verifies the processed manifest/jsonl/pkl/txt objects after NAS-to-S3 sync and
   calls `complete_s3_ready_check(...)` to mark `processed_s3_ready`. PM2 keeps
   both long-running worker processes resident; each worker's heartbeat loop
-  keeps its active job lock and PGMQ visibility timeout fresh.
+  keeps its active job lock and PGMQ visibility timeout fresh. Parse and
+  S3-ready jobs also enforce worker-local hard timeouts, classify failures as
+  retryable or terminal before calling `fail_job(...)`, and immediately archive
+  the queue message when the control plane returns `dead` so terminal documents
+  do not keep resurfacing in PGMQ.
 - Edge functions query indexes or storage populated by these workflows, but API
   serving remains outside this repository.
