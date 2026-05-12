@@ -19,6 +19,24 @@ class ClaimedJob:
 
 
 @dataclass(frozen=True)
+class ClaimJobResult:
+    claim_status: str
+    archive_current_message: bool
+    job_id: str
+    document_id: str | None
+    document_version: int | None
+    stage: str | None
+    status: str | None
+    payload_json: dict
+    next_retry_at: str | None
+    retry_wakeup_msg_id: int | None
+
+    @property
+    def claimed(self) -> bool:
+        return self.claim_status == "claimed"
+
+
+@dataclass(frozen=True)
 class S3ReadyEnqueueResult:
     parse_job_id: str
     parse_job_status: str
@@ -32,6 +50,8 @@ class FailJobResult:
     job_id: str
     job_status: str
     document_status: str
+    next_retry_at: str | None = None
+    retry_wakeup_msg_id: int | None = None
 
 
 def connect(database_url: str):
@@ -45,12 +65,12 @@ def claim_job(
     msg_id: int,
     worker_id: str,
     lock_seconds: int,
-) -> ClaimedJob | None:
+) -> ClaimJobResult | None:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             """
             select *
-            from public.start_job_from_pgmq_message(%s, %s, %s, %s, %s)
+            from public.claim_job_from_pgmq_message(%s, %s, %s, %s, %s)
             """,
             (job_id, queue_name, msg_id, worker_id, lock_seconds),
         )
@@ -58,13 +78,19 @@ def claim_job(
     conn.commit()
     if row is None:
         return None
-    return ClaimedJob(
+    return ClaimJobResult(
+        claim_status=str(row["claim_status"]),
+        archive_current_message=bool(row["archive_current_message"]),
         job_id=str(row["job_id"]),
-        document_id=str(row["document_id"]),
-        document_version=int(row["document_version"]),
-        stage=str(row["stage"]),
-        status=str(row["status"]),
+        document_id=str(row["document_id"]) if row["document_id"] is not None else None,
+        document_version=int(row["document_version"]) if row["document_version"] is not None else None,
+        stage=str(row["stage"]) if row["stage"] is not None else None,
+        status=str(row["status"]) if row["status"] is not None else None,
         payload_json=dict(row["payload_json"] or {}),
+        next_retry_at=row["next_retry_at"].isoformat() if row["next_retry_at"] is not None else None,
+        retry_wakeup_msg_id=(
+            int(row["retry_wakeup_msg_id"]) if row["retry_wakeup_msg_id"] is not None else None
+        ),
     )
 
 
@@ -95,7 +121,7 @@ def fail_job(
 ) -> FailJobResult | None:
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
-            "select * from public.fail_job(%s, %s, %s, %s, %s)",
+            "select * from public.fail_job_v2(%s, %s, %s, %s, %s)",
             (job_id, worker_id, retryable, error[:2000], error_stage),
         )
         row = cur.fetchone()
@@ -106,6 +132,10 @@ def fail_job(
         job_id=str(row["job_id"]),
         job_status=str(row["job_status"]),
         document_status=str(row["document_status"]),
+        next_retry_at=row["next_retry_at"].isoformat() if row["next_retry_at"] is not None else None,
+        retry_wakeup_msg_id=(
+            int(row["retry_wakeup_msg_id"]) if row["retry_wakeup_msg_id"] is not None else None
+        ),
     )
 
 

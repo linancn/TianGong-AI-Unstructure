@@ -11,8 +11,8 @@ checkPaths:
   - src/**
   - docker/**
   - requirements.txt
-lastReviewedAt: 2026-05-10
-lastReviewedCommit: 163c1c726891c17cba2ef3442e96b92af593ef6b
+lastReviewedAt: 2026-05-11
+lastReviewedCommit: 0fff3e2c5fde4757d2b285f4781ae12182946b35
 ---
 
 # Unstructure Architecture
@@ -70,9 +70,12 @@ the referenced files still exist.
   calls `complete_s3_ready_check(...)` to mark `processed_s3_ready`. PM2 keeps
   both long-running worker processes resident; each worker's heartbeat loop
   keeps its active job lock and PGMQ visibility timeout fresh. Parse and
-  S3-ready jobs also enforce worker-local hard timeouts, classify failures as
-  retryable or terminal before calling `fail_job(...)`, and immediately archive
-  the queue message when the control plane returns `dead` so terminal documents
-  do not keep resurfacing in PGMQ.
+  S3-ready jobs also enforce worker-local hard timeouts, consume typed
+  `claim_job_from_pgmq_message(...)` dispositions, classify failures as
+  retryable or terminal before calling `fail_job_v2(...)`, and archive the
+  current PGMQ message by queue/message id only when the control plane contract
+  says the current wake-up should be removed. Retryable failures archive the
+  current transport message after `fail_job_v2(...)` schedules the delayed
+  retry wake-up.
 - Edge functions query indexes or storage populated by these workflows, but API
   serving remains outside this repository.
