@@ -49,14 +49,33 @@ def worker_config() -> SimpleNamespace:
     )
 
 
-def claimed(stage: str) -> control_plane.ClaimedJob:
-    return control_plane.ClaimedJob(
+def claimed(stage: str) -> control_plane.ClaimJobResult:
+    return control_plane.ClaimJobResult(
+        claim_status="claimed",
+        archive_current_message=False,
         job_id="job-1",
         document_id="00000000-0000-0000-0000-000000000001",
         document_version=1,
         stage=stage,
         status="running",
         payload_json={},
+        next_retry_at=None,
+        retry_wakeup_msg_id=None,
+    )
+
+
+def claim_disposition(status: str, archive_current_message: bool) -> control_plane.ClaimJobResult:
+    return control_plane.ClaimJobResult(
+        claim_status=status,
+        archive_current_message=archive_current_message,
+        job_id="job-1",
+        document_id="00000000-0000-0000-0000-000000000001",
+        document_version=1,
+        stage="parse",
+        status="failed",
+        payload_json={},
+        next_retry_at="2026-05-11T10:00:00+00:00",
+        retry_wakeup_msg_id=42,
     )
 
 
@@ -96,16 +115,16 @@ class KbParseWorkerReliabilityTests(unittest.TestCase):
             patch("src.kb_parse_worker.worker.control_plane.claim_job", return_value=claimed("parse")),
             patch("src.kb_parse_worker.worker.load_parse_snapshot", side_effect=RuntimeError("EMPTY_RESULT")),
             patch("src.kb_parse_worker.worker.control_plane.fail_job", return_value=fail_result) as fail_job,
-            patch("src.kb_parse_worker.worker.queue.archive_job_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.queue.archive_job_message_by_id", return_value=True) as archive,
             patch("src.kb_parse_worker.worker.LOGGER.exception"),
         ):
             ParseWorker(worker_config()).process_message(conn, message())
 
         fail_job.assert_called_once()
         self.assertFalse(fail_job.call_args.args[3])
-        archive.assert_called_once_with(conn, "job-1", "worker-1")
+        archive.assert_called_once_with(conn, "kb_parse_queue", 1)
 
-    def test_parse_timeout_marks_retryable_without_archiving_failed_job(self) -> None:
+    def test_parse_timeout_marks_retryable_and_archives_current_message(self) -> None:
         conn = object()
         fail_result = control_plane.FailJobResult(
             job_id="job-1",
@@ -120,14 +139,14 @@ class KbParseWorkerReliabilityTests(unittest.TestCase):
                 side_effect=JobTimeout("PARSE_JOB_TIMEOUT_AFTER_60s"),
             ),
             patch("src.kb_parse_worker.worker.control_plane.fail_job", return_value=fail_result) as fail_job,
-            patch("src.kb_parse_worker.worker.queue.archive_job_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.queue.archive_job_message_by_id", return_value=True) as archive,
             patch("src.kb_parse_worker.worker.LOGGER.exception"),
         ):
             ParseWorker(worker_config()).process_message(conn, message())
 
         fail_job.assert_called_once()
         self.assertTrue(fail_job.call_args.args[3])
-        archive.assert_not_called()
+        archive.assert_called_once_with(conn, "kb_parse_queue", 1)
 
     def test_s3_ready_terminal_failure_marks_non_retryable_and_archives_dead_job(self) -> None:
         conn = object()
@@ -147,7 +166,7 @@ class KbParseWorkerReliabilityTests(unittest.TestCase):
                 return_value=SimpleNamespace(processed_manifest_local_uri=None),
             ),
             patch("src.kb_parse_worker.worker.control_plane.fail_job", return_value=fail_result) as fail_job,
-            patch("src.kb_parse_worker.worker.queue.archive_job_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.queue.archive_job_message_by_id", return_value=True) as archive,
             patch("src.kb_parse_worker.worker.LOGGER.exception"),
         ):
             S3ReadyWorker(worker_config()).process_message(conn, message())
@@ -156,7 +175,7 @@ class KbParseWorkerReliabilityTests(unittest.TestCase):
         self.assertFalse(fail_job.call_args.args[3])
         archive.assert_called_once()
 
-    def test_s3_ready_transient_failure_marks_retryable_without_archiving_failed_job(self) -> None:
+    def test_s3_ready_transient_failure_marks_retryable_and_archives_current_message(self) -> None:
         conn = object()
         fail_result = control_plane.FailJobResult(
             job_id="job-1",
@@ -174,14 +193,40 @@ class KbParseWorkerReliabilityTests(unittest.TestCase):
                 side_effect=RuntimeError("S3_NOT_READY_AFTER_TIMEOUT: sync delay"),
             ),
             patch("src.kb_parse_worker.worker.control_plane.fail_job", return_value=fail_result) as fail_job,
-            patch("src.kb_parse_worker.worker.queue.archive_job_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.queue.archive_job_message_by_id", return_value=True) as archive,
             patch("src.kb_parse_worker.worker.LOGGER.exception"),
         ):
             S3ReadyWorker(worker_config()).process_message(conn, message())
 
         fail_job.assert_called_once()
         self.assertTrue(fail_job.call_args.args[3])
+        archive.assert_called_once_with(conn, "kb_s3_ready_queue", 1)
+
+    def test_parse_backoff_not_due_leaves_current_message_when_contract_says_keep(self) -> None:
+        conn = object()
+        with (
+            patch(
+                "src.kb_parse_worker.worker.control_plane.claim_job",
+                return_value=claim_disposition("backoff_not_due", False),
+            ),
+            patch("src.kb_parse_worker.worker.queue.archive_job_message_by_id", return_value=True) as archive,
+        ):
+            ParseWorker(worker_config()).process_message(conn, message())
+
         archive.assert_not_called()
+
+    def test_parse_backoff_not_due_archives_current_message_when_contract_says_archive(self) -> None:
+        conn = object()
+        with (
+            patch(
+                "src.kb_parse_worker.worker.control_plane.claim_job",
+                return_value=claim_disposition("backoff_not_due", True),
+            ),
+            patch("src.kb_parse_worker.worker.queue.archive_job_message_by_id", return_value=True) as archive,
+        ):
+            ParseWorker(worker_config()).process_message(conn, message())
+
+        archive.assert_called_once_with(conn, "kb_parse_queue", 1)
 
 
 if __name__ == "__main__":

@@ -12,8 +12,8 @@ checkPaths:
   - requirements.txt
   - src/**
   - docker/**
-lastReviewedAt: 2026-05-10
-lastReviewedCommit: 163c1c726891c17cba2ef3442e96b92af593ef6b
+lastReviewedAt: 2026-05-11
+lastReviewedCommit: 0fff3e2c5fde4757d2b285f4781ae12182946b35
 ---
 
 # Unstructure Development Runbook
@@ -183,15 +183,18 @@ and S3-ready worker as separate PM2 processes. Retry attempts for the S3-ready
 stage reuse `processed_manifest_local_uri` and only re-check processed S3
 readiness; they do not parse the document again.
 
-Worker failures are classified before calling `fail_job(...)`. Terminal parse
+Worker failures are classified before calling `fail_job_v2(...)`. Terminal parse
 failures such as `RAW_HASH_MISMATCH`, `RAW_STORAGE_PATH_MISMATCH`, malformed
 parser responses, empty parse results, and embedding schema/dimension errors are
 reported with `retryable=false`. Transient parser, embedding, DB, timeout, and
 network failures remain retryable. Terminal S3-ready failures include missing
 local manifests, manifest identity mismatches, and strict sha256 artifact
-mismatches; ordinary S3 sync delays remain retryable. When `fail_job(...)`
-returns `dead`, the worker archives the PGMQ message immediately so a terminal
-document does not keep resurfacing after the visibility timeout.
+mismatches; ordinary S3 sync delays remain retryable. Retryable failure calls
+schedule delayed retry wake-up messages in the KB control plane, so the worker
+archives the current PGMQ transport message by queue/message id after
+`fail_job_v2(...)` returns. Claim dispositions such as `backoff_not_due`,
+`cancelled`, `dead`, and duplicate wake-ups are archived only when
+`archive_current_message` is true.
 
 Use `KB_PARSE_S3_READY_MODE=skip` only for local smoke runs where processed S3
 sync is intentionally unavailable.

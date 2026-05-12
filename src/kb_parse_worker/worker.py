@@ -106,17 +106,52 @@ def is_s3_ready_failure_retryable(error: Exception) -> bool:
     return True
 
 
-def fail_job_and_archive_if_dead(
+def archive_current_message(conn, queue_name: str, msg_id: int) -> bool:
+    return queue.archive_job_message_by_id(conn, queue_name, msg_id)
+
+
+def handle_unclaimed_message(
+    conn,
+    queue_name: str,
+    message: queue.QueueMessage,
+    claim: control_plane.ClaimJobResult | None,
+) -> None:
+    if claim is None:
+        LOGGER.warning("job %s returned no claim disposition", message.job_id)
+        return
+    LOGGER.info(
+        "job %s was not claimed status=%s archive_current_message=%s next_retry_at=%s retry_wakeup_msg_id=%s",
+        message.job_id,
+        claim.claim_status,
+        claim.archive_current_message,
+        claim.next_retry_at,
+        claim.retry_wakeup_msg_id,
+    )
+    if claim.archive_current_message:
+        archive_current_message(conn, queue_name, message.msg_id)
+
+
+def fail_job_and_archive_current_message(
     conn,
     job_id: str,
+    queue_name: str,
+    msg_id: int,
     worker_id: str,
     retryable: bool,
     error: str,
     error_stage: str,
 ) -> control_plane.FailJobResult | None:
     result = control_plane.fail_job(conn, job_id, worker_id, retryable, error, error_stage)
-    if result is not None and result.job_status == "dead":
-        queue.archive_job_message(conn, job_id, worker_id)
+    if result is not None:
+        LOGGER.info(
+            "job %s failed status=%s retryable=%s next_retry_at=%s retry_wakeup_msg_id=%s",
+            job_id,
+            result.job_status,
+            retryable,
+            result.next_retry_at,
+            result.retry_wakeup_msg_id,
+        )
+        archive_current_message(conn, queue_name, msg_id)
     return result
 
 
@@ -211,14 +246,15 @@ class ParseWorker:
             self.config.worker_id,
             self.config.lock_seconds,
         )
-        if claimed is None:
-            LOGGER.info("job %s was not claimable", message.job_id)
-            queue.archive_job_message(conn, message.job_id, self.config.worker_id)
+        if claimed is None or not claimed.claimed:
+            handle_unclaimed_message(conn, self.config.queue_name, message, claimed)
             return
         if claimed.stage != "parse":
-            fail_job_and_archive_if_dead(
+            fail_job_and_archive_current_message(
                 conn,
                 claimed.job_id,
+                self.config.queue_name,
+                message.msg_id,
                 self.config.worker_id,
                 False,
                 "UNSUPPORTED_STAGE",
@@ -353,13 +389,15 @@ class ParseWorker:
                     s3_ready_result.s3_ready_job_id,
                     s3_ready_result.s3_ready_msg_id,
                 )
-                queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
+                archive_current_message(conn, self.config.queue_name, message.msg_id)
         except Exception as exc:
             LOGGER.exception("parse job %s failed", claimed.job_id)
             retryable = is_parse_failure_retryable(exc)
-            fail_job_and_archive_if_dead(
+            fail_job_and_archive_current_message(
                 conn,
                 claimed.job_id,
+                self.config.queue_name,
+                message.msg_id,
                 self.config.worker_id,
                 retryable,
                 str(exc),
@@ -398,14 +436,15 @@ class S3ReadyWorker:
             self.config.worker_id,
             self.config.lock_seconds,
         )
-        if claimed is None:
-            LOGGER.info("s3_ready job %s was not claimable", message.job_id)
-            queue.archive_job_message(conn, message.job_id, self.config.worker_id)
+        if claimed is None or not claimed.claimed:
+            handle_unclaimed_message(conn, self.config.s3_ready_queue_name, message, claimed)
             return
         if claimed.stage != "s3_ready":
-            fail_job_and_archive_if_dead(
+            fail_job_and_archive_current_message(
                 conn,
                 claimed.job_id,
+                self.config.s3_ready_queue_name,
+                message.msg_id,
                 self.config.worker_id,
                 False,
                 "UNSUPPORTED_STAGE",
@@ -457,13 +496,15 @@ class S3ReadyWorker:
                 )
                 if not ok:
                     raise RuntimeError("complete_s3_ready_check returned false")
-                queue.archive_job_message(conn, claimed.job_id, self.config.worker_id)
+                archive_current_message(conn, self.config.s3_ready_queue_name, message.msg_id)
         except Exception as exc:
             LOGGER.exception("s3_ready job %s failed", claimed.job_id)
             retryable = is_s3_ready_failure_retryable(exc)
-            fail_job_and_archive_if_dead(
+            fail_job_and_archive_current_message(
                 conn,
                 claimed.job_id,
+                self.config.s3_ready_queue_name,
+                message.msg_id,
                 self.config.worker_id,
                 retryable,
                 str(exc),

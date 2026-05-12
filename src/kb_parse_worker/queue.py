@@ -39,3 +39,10 @@ def archive_job_message(conn, job_id: str, worker_id: str | None = None) -> bool
     conn.commit()
     return bool(row and row[0])
 
+
+def archive_job_message_by_id(conn, queue_name: str, msg_id: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("select public.archive_job_message_by_id(%s, %s)", (queue_name, msg_id))
+        row = cur.fetchone()
+    conn.commit()
+    return bool(row and row[0])
