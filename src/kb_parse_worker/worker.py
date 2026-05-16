@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import nullcontext
 import logging
 import threading
 import time
 from pathlib import Path
 
+import psycopg2
 import requests
 
 from . import control_plane, queue
@@ -25,6 +27,8 @@ from .snapshot import (
 )
 
 LOGGER = logging.getLogger(__name__)
+FINALIZE_DB_MAX_ATTEMPTS = 3
+FINALIZE_DB_INITIAL_BACKOFF_SECONDS = 1.0
 
 
 class JobTimeout(RuntimeError):
@@ -110,6 +114,76 @@ def archive_current_message(conn, queue_name: str, msg_id: int) -> bool:
     return queue.archive_job_message_by_id(conn, queue_name, msg_id)
 
 
+def _is_retryable_finalization_error(error: Exception) -> bool:
+    return isinstance(error, (psycopg2.InterfaceError, psycopg2.OperationalError))
+
+
+def _finalization_backoff_seconds(attempt: int) -> float:
+    return FINALIZE_DB_INITIAL_BACKOFF_SECONDS * (2 ** max(0, attempt - 1))
+
+
+def complete_parse_local_ready_and_archive_with_retry(
+    config: WorkerConfig,
+    conn,
+    job_id: str,
+    document_id: str,
+    document_version: int,
+    manifest_local_uri: str,
+    artifact_uuid: str,
+    manifest_hash: str,
+    chunk_count: int,
+    metadata_json: dict,
+    s3_ready_payload_json: dict,
+    queue_name: str,
+    msg_id: int,
+    max_attempts: int = FINALIZE_DB_MAX_ATTEMPTS,
+) -> control_plane.S3ReadyEnqueueResult:
+    if max_attempts <= 0:
+        raise ValueError("max_attempts must be positive")
+
+    for attempt in range(1, max_attempts + 1):
+        connection_context = (
+            nullcontext(conn)
+            if attempt == 1
+            else control_plane.connect(config.database_url)
+        )
+        try:
+            with connection_context as active_conn:
+                result = control_plane.complete_parse_local_ready_and_enqueue_s3_check(
+                    active_conn,
+                    job_id,
+                    config.worker_id,
+                    document_id,
+                    document_version,
+                    manifest_local_uri,
+                    artifact_uuid,
+                    manifest_hash,
+                    chunk_count,
+                    metadata_json,
+                    s3_ready_payload_json,
+                )
+                if result is None:
+                    raise RuntimeError(
+                        "complete_parse_local_ready_and_enqueue_s3_check returned no row"
+                    )
+                archive_current_message(active_conn, queue_name, msg_id)
+                return result
+        except Exception as exc:
+            if not _is_retryable_finalization_error(exc) or attempt >= max_attempts:
+                raise
+            LOGGER.warning(
+                "parse job %s finalization DB write failed on attempt %s/%s; "
+                "reconnecting before retry",
+                job_id,
+                attempt,
+                max_attempts,
+                exc_info=True,
+            )
+            time.sleep(_finalization_backoff_seconds(attempt))
+
+    raise RuntimeError("parse finalization retry loop exhausted")
+
+
 def handle_unclaimed_message(
     conn,
     queue_name: str,
@@ -132,6 +206,7 @@ def handle_unclaimed_message(
 
 
 def fail_job_and_archive_current_message(
+    config: WorkerConfig,
     conn,
     job_id: str,
     queue_name: str,
@@ -140,19 +215,109 @@ def fail_job_and_archive_current_message(
     retryable: bool,
     error: str,
     error_stage: str,
+    max_attempts: int = FINALIZE_DB_MAX_ATTEMPTS,
 ) -> control_plane.FailJobResult | None:
-    result = control_plane.fail_job(conn, job_id, worker_id, retryable, error, error_stage)
-    if result is not None:
-        LOGGER.info(
-            "job %s failed status=%s retryable=%s next_retry_at=%s retry_wakeup_msg_id=%s",
-            job_id,
-            result.job_status,
-            retryable,
-            result.next_retry_at,
-            result.retry_wakeup_msg_id,
+    if max_attempts <= 0:
+        raise ValueError("max_attempts must be positive")
+
+    for attempt in range(1, max_attempts + 1):
+        connection_context = (
+            nullcontext(conn)
+            if attempt == 1
+            else control_plane.connect(config.database_url)
         )
-        archive_current_message(conn, queue_name, msg_id)
-    return result
+        try:
+            with connection_context as active_conn:
+                result = control_plane.fail_job(
+                    active_conn,
+                    job_id,
+                    worker_id,
+                    retryable,
+                    error,
+                    error_stage,
+                )
+                if result is not None:
+                    LOGGER.info(
+                        "job %s failed status=%s retryable=%s next_retry_at=%s retry_wakeup_msg_id=%s",
+                        job_id,
+                        result.job_status,
+                        retryable,
+                        result.next_retry_at,
+                        result.retry_wakeup_msg_id,
+                    )
+                    archive_current_message(active_conn, queue_name, msg_id)
+                return result
+        except Exception as exc:
+            if not _is_retryable_finalization_error(exc) or attempt >= max_attempts:
+                raise
+            LOGGER.warning(
+                "job %s fail_job DB write failed on attempt %s/%s; reconnecting before retry",
+                job_id,
+                attempt,
+                max_attempts,
+                exc_info=True,
+            )
+            time.sleep(_finalization_backoff_seconds(attempt))
+
+    raise RuntimeError("fail_job retry loop exhausted")
+
+
+def complete_s3_ready_check_and_archive_with_retry(
+    config: WorkerConfig,
+    conn,
+    job_id: str,
+    document_id: str,
+    document_version: int,
+    manifest_s3_key: str,
+    manifest_hash: str,
+    artifact_uuid: str,
+    manifest_local_uri: str,
+    chunk_count: int,
+    queue_name: str,
+    msg_id: int,
+    max_attempts: int = FINALIZE_DB_MAX_ATTEMPTS,
+) -> bool:
+    if max_attempts <= 0:
+        raise ValueError("max_attempts must be positive")
+
+    for attempt in range(1, max_attempts + 1):
+        connection_context = (
+            nullcontext(conn)
+            if attempt == 1
+            else control_plane.connect(config.database_url)
+        )
+        try:
+            with connection_context as active_conn:
+                ok = control_plane.complete_s3_ready_check(
+                    active_conn,
+                    job_id,
+                    config.worker_id,
+                    document_id,
+                    document_version,
+                    manifest_s3_key,
+                    manifest_hash,
+                    artifact_uuid,
+                    manifest_local_uri,
+                    chunk_count,
+                )
+                if not ok:
+                    raise RuntimeError("complete_s3_ready_check returned false")
+                archive_current_message(active_conn, queue_name, msg_id)
+                return True
+        except Exception as exc:
+            if not _is_retryable_finalization_error(exc) or attempt >= max_attempts:
+                raise
+            LOGGER.warning(
+                "s3_ready job %s finalization DB write failed on attempt %s/%s; "
+                "reconnecting before retry",
+                job_id,
+                attempt,
+                max_attempts,
+                exc_info=True,
+            )
+            time.sleep(_finalization_backoff_seconds(attempt))
+
+    raise RuntimeError("s3_ready finalization retry loop exhausted")
 
 
 def _sha256(path: Path) -> str:
@@ -251,6 +416,7 @@ class ParseWorker:
             return
         if claimed.stage != "parse":
             fail_job_and_archive_current_message(
+                self.config,
                 conn,
                 claimed.job_id,
                 self.config.queue_name,
@@ -368,10 +534,10 @@ class ParseWorker:
                     "s3_bucket": self.config.s3_bucket,
                     "s3_prefix": self.config.s3_processed_prefix,
                 }
-                s3_ready_result = control_plane.complete_parse_local_ready_and_enqueue_s3_check(
+                s3_ready_result = complete_parse_local_ready_and_archive_with_retry(
+                    self.config,
                     conn,
                     claimed.job_id,
-                    self.config.worker_id,
                     claimed.document_id,
                     claimed.document_version,
                     manifest_local_uri,
@@ -380,20 +546,20 @@ class ParseWorker:
                     artifact_info.chunk_count,
                     metadata_json,
                     s3_ready_payload_json,
+                    self.config.queue_name,
+                    message.msg_id,
                 )
-                if s3_ready_result is None:
-                    raise RuntimeError("complete_parse_local_ready_and_enqueue_s3_check returned no row")
                 LOGGER.info(
                     "parse job %s completed local artifacts and queued s3_ready job %s msg %s",
                     claimed.job_id,
                     s3_ready_result.s3_ready_job_id,
                     s3_ready_result.s3_ready_msg_id,
                 )
-                archive_current_message(conn, self.config.queue_name, message.msg_id)
         except Exception as exc:
             LOGGER.exception("parse job %s failed", claimed.job_id)
             retryable = is_parse_failure_retryable(exc)
             fail_job_and_archive_current_message(
+                self.config,
                 conn,
                 claimed.job_id,
                 self.config.queue_name,
@@ -441,6 +607,7 @@ class S3ReadyWorker:
             return
         if claimed.stage != "s3_ready":
             fail_job_and_archive_current_message(
+                self.config,
                 conn,
                 claimed.job_id,
                 self.config.s3_ready_queue_name,
@@ -482,10 +649,10 @@ class S3ReadyWorker:
                 lease.check()
                 deadline.check()
 
-                ok = control_plane.complete_s3_ready_check(
+                ok = complete_s3_ready_check_and_archive_with_retry(
+                    self.config,
                     conn,
                     claimed.job_id,
-                    self.config.worker_id,
                     claimed.document_id,
                     claimed.document_version,
                     manifest_s3_key,
@@ -493,14 +660,16 @@ class S3ReadyWorker:
                     artifact_info.artifact_uuid,
                     manifest_path.as_posix(),
                     artifact_info.chunk_count,
+                    self.config.s3_ready_queue_name,
+                    message.msg_id,
                 )
                 if not ok:
                     raise RuntimeError("complete_s3_ready_check returned false")
-                archive_current_message(conn, self.config.s3_ready_queue_name, message.msg_id)
         except Exception as exc:
             LOGGER.exception("s3_ready job %s failed", claimed.job_id)
             retryable = is_s3_ready_failure_retryable(exc)
             fail_job_and_archive_current_message(
+                self.config,
                 conn,
                 claimed.job_id,
                 self.config.s3_ready_queue_name,

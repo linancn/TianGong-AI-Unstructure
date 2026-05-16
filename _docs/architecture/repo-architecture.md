@@ -11,8 +11,8 @@ checkPaths:
   - src/**
   - docker/**
   - requirements.txt
-lastReviewedAt: 2026-05-11
-lastReviewedCommit: 0fff3e2c5fde4757d2b285f4781ae12182946b35
+lastReviewedAt: 2026-05-15
+lastReviewedCommit: 20c981396c87a97f3d01d190b9fd6dc3fee0aa22
 ---
 
 # Unstructure Architecture
@@ -65,9 +65,12 @@ the referenced files still exist.
   and normalizes vectors to 1536 dimensions, stores vectors in the pickle chunks
   under `embedding`, and excludes `embedding` from the JSONL artifact.
   That RPC completes the parse job, leaves the document in `s3_sync_pending`,
-  and enqueues a durable `s3_ready` job. A separate S3-ready worker then
-  verifies the processed manifest/jsonl/pkl/txt objects after NAS-to-S3 sync and
-  calls `complete_s3_ready_check(...)` to mark `processed_s3_ready`. PM2 keeps
+  and enqueues a durable `s3_ready` job. The parse worker treats that final
+  local-ready RPC plus parse-message archive as one finalization step. A
+  separate S3-ready worker then verifies the processed manifest/jsonl/pkl/txt
+  objects after NAS-to-S3 sync and calls `complete_s3_ready_check(...)` to mark
+  `processed_s3_ready`. Final DB transitions and failure writes retry transient
+  Postgres connection failures with short reconnecting backoff. PM2 keeps
   both long-running worker processes resident; each worker's heartbeat loop
   keeps its active job lock and PGMQ visibility timeout fresh. Parse and
   S3-ready jobs also enforce worker-local hard timeouts, consume typed
