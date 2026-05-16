@@ -12,8 +12,8 @@ checkPaths:
   - requirements.txt
   - src/**
   - docker/**
-lastReviewedAt: 2026-05-15
-lastReviewedCommit: 20c981396c87a97f3d01d190b9fd6dc3fee0aa22
+lastReviewedAt: 2026-05-16
+lastReviewedCommit: 16836b132b4eb369a474bb570262cfb0a093addc
 ---
 
 # Unstructure Development Runbook
@@ -52,6 +52,8 @@ Run one queue message:
 ```bash
 python -m src.kb_parse_worker.cli once
 python -m src.kb_parse_worker.cli once --worker s3-ready
+python -m src.kb_parse_worker.cli once --worker parse-finalization-reconciler --dry-run
+python -m src.kb_parse_worker.cli once --worker parse-finalization-reconciler
 ```
 
 Run continuously:
@@ -59,6 +61,7 @@ Run continuously:
 ```bash
 python -m src.kb_parse_worker.cli run
 python -m src.kb_parse_worker.cli run --worker s3-ready
+python -m src.kb_parse_worker.cli run --worker parse-finalization-reconciler
 ```
 
 Run continuously under PM2:
@@ -186,6 +189,15 @@ For deployments where NAS-to-S3 sync can take a long time, keep the parse worker
 and S3-ready worker as separate PM2 processes. Retry attempts for the S3-ready
 stage reuse `processed_manifest_local_uri` and only re-check processed S3
 readiness; they do not parse the document again.
+
+If a parse job generated deterministic processed artifacts but the final DB
+handoff never committed, run the parse finalization reconciler on the worker
+host. It scans stale `failed`, `dead`, or expired `running` parse jobs whose
+documents do not yet have processed manifest fields, checks the deterministic
+`NAS_PROCESSED_ROOT/{processed_storage_path}/{document_id}/manifest.json`, and
+calls `replay_parse_local_ready_from_artifact(...)` to mark local processed
+artifacts ready and enqueue `s3_ready`. Use `--dry-run` before live replay, and
+use `--document-id <uuid>` to limit a repair to one document.
 
 Worker failures are classified before calling `fail_job_v2(...)`. Terminal parse
 failures such as `RAW_HASH_MISMATCH`, `RAW_STORAGE_PATH_MISMATCH`, malformed

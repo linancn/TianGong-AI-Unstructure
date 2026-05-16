@@ -258,6 +258,55 @@ def complete_parse_local_ready_and_enqueue_s3_check(
     )
 
 
+def replay_parse_local_ready_from_artifact(
+    conn,
+    job_id: str,
+    worker_id: str,
+    document_id: str,
+    document_version: int,
+    manifest_local_uri: str,
+    artifact_uuid: str,
+    manifest_hash: str,
+    chunk_count: int,
+    metadata_json: dict,
+    s3_ready_payload_json: dict,
+    replay_reason: str,
+) -> S3ReadyEnqueueResult | None:
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            """
+            select *
+            from public.replay_parse_local_ready_from_artifact(
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            (
+                job_id,
+                worker_id,
+                document_id,
+                document_version,
+                manifest_local_uri,
+                artifact_uuid,
+                manifest_hash,
+                chunk_count,
+                psycopg2.extras.Json(metadata_json),
+                psycopg2.extras.Json(s3_ready_payload_json),
+                replay_reason,
+            ),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    if row is None:
+        return None
+    return S3ReadyEnqueueResult(
+        parse_job_id=str(row["parse_job_id"]),
+        parse_job_status=str(row["parse_job_status"]),
+        s3_ready_job_id=str(row["s3_ready_job_id"]),
+        s3_ready_msg_id=int(row["s3_ready_msg_id"]),
+        document_status=str(row["document_status"]),
+    )
+
+
 def complete_s3_ready_check(
     conn,
     job_id: str,
