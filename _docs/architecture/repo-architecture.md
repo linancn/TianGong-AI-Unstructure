@@ -66,7 +66,11 @@ the referenced files still exist.
   under `embedding`, and excludes `embedding` from the JSONL artifact.
   That RPC completes the parse job, leaves the document in `s3_sync_pending`,
   and enqueues a durable `s3_ready` job. The parse worker treats that final
-  local-ready RPC plus parse-message archive as one finalization step. A
+  local-ready RPC plus parse-message archive as one finalization step. A parse
+  finalization reconciler can repair historical splits where deterministic
+  processed artifacts already exist on NAS but the final DB handoff did not
+  commit; it validates the local manifest identity and replays the local-ready
+  DB transition without re-running document parsing. A
   separate S3-ready worker then verifies the processed manifest/jsonl/pkl/txt
   objects after NAS-to-S3 sync and calls `complete_s3_ready_check(...)` to mark
   `processed_s3_ready`. Final DB transitions and failure writes retry transient
