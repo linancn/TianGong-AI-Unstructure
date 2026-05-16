@@ -4,11 +4,16 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import psycopg2
+
 from src.kb_parse_worker import control_plane, queue
 from src.kb_parse_worker.worker import (
     JobTimeout,
     ParseWorker,
     S3ReadyWorker,
+    complete_s3_ready_check_and_archive_with_retry,
+    complete_parse_local_ready_and_archive_with_retry,
+    fail_job_and_archive_current_message,
     is_parse_failure_retryable,
     is_s3_ready_failure_retryable,
 )
@@ -81,6 +86,17 @@ def claim_disposition(status: str, archive_current_message: bool) -> control_pla
 
 def message() -> queue.QueueMessage:
     return queue.QueueMessage(msg_id=1, job_id="job-1", raw_payload={"job_id": "job-1"})
+
+
+class FakeConnection:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __enter__(self) -> "FakeConnection":
+        return self
+
+    def __exit__(self, _exc_type, _exc, _tb) -> None:
+        return None
 
 
 class KbParseWorkerReliabilityTests(unittest.TestCase):
@@ -227,6 +243,177 @@ class KbParseWorkerReliabilityTests(unittest.TestCase):
             ParseWorker(worker_config()).process_message(conn, message())
 
         archive.assert_called_once_with(conn, "kb_parse_queue", 1)
+
+    def test_parse_finalization_reconnects_and_retries_db_connection_errors(self) -> None:
+        original_conn = FakeConnection("original")
+        retry_conn = FakeConnection("retry")
+        result = control_plane.S3ReadyEnqueueResult(
+            parse_job_id="job-1",
+            parse_job_status="succeeded",
+            s3_ready_job_id="s3-job-1",
+            s3_ready_msg_id=123,
+            document_status="s3_sync_pending",
+        )
+        calls: list[FakeConnection] = []
+
+        def complete(conn, *_args, **_kwargs):
+            calls.append(conn)
+            if len(calls) == 1:
+                raise psycopg2.OperationalError("server closed the connection unexpectedly")
+            return result
+
+        with (
+            patch(
+                "src.kb_parse_worker.worker.control_plane.complete_parse_local_ready_and_enqueue_s3_check",
+                side_effect=complete,
+            ),
+            patch("src.kb_parse_worker.worker.control_plane.connect", return_value=retry_conn) as connect,
+            patch("src.kb_parse_worker.worker.archive_current_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.time.sleep") as sleep,
+            patch("src.kb_parse_worker.worker.LOGGER.warning"),
+        ):
+            actual = complete_parse_local_ready_and_archive_with_retry(
+                worker_config(),
+                original_conn,
+                "job-1",
+                "00000000-0000-0000-0000-000000000001",
+                1,
+                "/processed/manifest.json",
+                "00000000-0000-0000-0000-000000000002",
+                "hash",
+                7,
+                {"processed": {}},
+                {"manifest_s3_key": "processed/manifest.json"},
+                "kb_parse_queue",
+                1,
+            )
+
+        self.assertEqual(actual, result)
+        self.assertEqual(calls, [original_conn, retry_conn])
+        connect.assert_called_once_with("postgresql://test")
+        sleep.assert_called_once_with(1.0)
+        archive.assert_called_once_with(retry_conn, "kb_parse_queue", 1)
+
+    def test_parse_finalization_does_not_retry_non_db_errors(self) -> None:
+        original_conn = FakeConnection("original")
+
+        with (
+            patch(
+                "src.kb_parse_worker.worker.control_plane.complete_parse_local_ready_and_enqueue_s3_check",
+                side_effect=RuntimeError(
+                    "complete_parse_local_ready_and_enqueue_s3_check returned no row"
+                ),
+            ) as complete,
+            patch("src.kb_parse_worker.worker.control_plane.connect") as connect,
+            patch("src.kb_parse_worker.worker.archive_current_message") as archive,
+            patch("src.kb_parse_worker.worker.time.sleep") as sleep,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "returned no row"):
+                complete_parse_local_ready_and_archive_with_retry(
+                    worker_config(),
+                    original_conn,
+                    "job-1",
+                    "00000000-0000-0000-0000-000000000001",
+                    1,
+                    "/processed/manifest.json",
+                    "00000000-0000-0000-0000-000000000002",
+                    "hash",
+                    7,
+                    {"processed": {}},
+                    {"manifest_s3_key": "processed/manifest.json"},
+                    "kb_parse_queue",
+                    1,
+                )
+
+        complete.assert_called_once()
+        connect.assert_not_called()
+        archive.assert_not_called()
+        sleep.assert_not_called()
+
+    def test_s3_ready_finalization_reconnects_and_retries_db_connection_errors(self) -> None:
+        original_conn = FakeConnection("original")
+        retry_conn = FakeConnection("retry")
+        calls: list[FakeConnection] = []
+
+        def complete(conn, *_args, **_kwargs):
+            calls.append(conn)
+            if len(calls) == 1:
+                raise psycopg2.InterfaceError("connection already closed")
+            return True
+
+        with (
+            patch(
+                "src.kb_parse_worker.worker.control_plane.complete_s3_ready_check",
+                side_effect=complete,
+            ),
+            patch("src.kb_parse_worker.worker.control_plane.connect", return_value=retry_conn) as connect,
+            patch("src.kb_parse_worker.worker.archive_current_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.time.sleep") as sleep,
+            patch("src.kb_parse_worker.worker.LOGGER.warning"),
+        ):
+            ok = complete_s3_ready_check_and_archive_with_retry(
+                worker_config(),
+                original_conn,
+                "job-1",
+                "00000000-0000-0000-0000-000000000001",
+                1,
+                "processed/manifest.json",
+                "hash",
+                "00000000-0000-0000-0000-000000000002",
+                "/processed/manifest.json",
+                7,
+                "kb_s3_ready_queue",
+                1,
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(calls, [original_conn, retry_conn])
+        connect.assert_called_once_with("postgresql://test")
+        sleep.assert_called_once_with(1.0)
+        archive.assert_called_once_with(retry_conn, "kb_s3_ready_queue", 1)
+
+    def test_fail_job_reconnects_and_retries_db_connection_errors(self) -> None:
+        original_conn = FakeConnection("original")
+        retry_conn = FakeConnection("retry")
+        result = control_plane.FailJobResult(
+            job_id="job-1",
+            job_status="failed",
+            document_status="parse_queued",
+            next_retry_at="2026-05-15T10:00:00+00:00",
+            retry_wakeup_msg_id=10,
+        )
+        calls: list[FakeConnection] = []
+
+        def fail(conn, *_args, **_kwargs):
+            calls.append(conn)
+            if len(calls) == 1:
+                raise psycopg2.OperationalError("server closed the connection unexpectedly")
+            return result
+
+        with (
+            patch("src.kb_parse_worker.worker.control_plane.fail_job", side_effect=fail),
+            patch("src.kb_parse_worker.worker.control_plane.connect", return_value=retry_conn) as connect,
+            patch("src.kb_parse_worker.worker.archive_current_message", return_value=True) as archive,
+            patch("src.kb_parse_worker.worker.time.sleep") as sleep,
+            patch("src.kb_parse_worker.worker.LOGGER.warning"),
+        ):
+            actual = fail_job_and_archive_current_message(
+                worker_config(),
+                original_conn,
+                "job-1",
+                "kb_parse_queue",
+                1,
+                "worker-1",
+                True,
+                "temporary failure",
+                "parse",
+            )
+
+        self.assertEqual(actual, result)
+        self.assertEqual(calls, [original_conn, retry_conn])
+        connect.assert_called_once_with("postgresql://test")
+        sleep.assert_called_once_with(1.0)
+        archive.assert_called_once_with(retry_conn, "kb_parse_queue", 1)
 
 
 if __name__ == "__main__":

@@ -12,8 +12,8 @@ checkPaths:
   - requirements.txt
   - src/**
   - docker/**
-lastReviewedAt: 2026-05-11
-lastReviewedCommit: 0fff3e2c5fde4757d2b285f4781ae12182946b35
+lastReviewedAt: 2026-05-15
+lastReviewedCommit: 20c981396c87a97f3d01d190b9fd6dc3fee0aa22
 ---
 
 # Unstructure Development Runbook
@@ -168,9 +168,13 @@ The workers do not upload artifacts to S3 directly. The parse worker writes raw
 inputs and processed artifacts to NAS paths, including the manifest-declared
 JSONL, pickle, and optional full-text TXT artifacts, calls
 `complete_parse_local_ready_and_enqueue_s3_check(...)`, archives the parse queue
-message, and exits without waiting for NAS-to-S3 sync. The S3-ready worker then
-waits for the NAS sync layer to publish processed artifacts to S3 before calling
-`complete_s3_ready_check(...)`. Tune the S3-ready worker check wait window with:
+message, and exits without waiting for NAS-to-S3 sync. The local-ready RPC and
+message archive, S3-ready completion RPC and message archive, and `fail_job_v2`
+failure writes are retried up to three times for transient Postgres connection
+errors; retries reconnect before replaying the idempotent DB handoff. The
+S3-ready worker then waits for the NAS sync layer to publish processed artifacts
+to S3 before calling `complete_s3_ready_check(...)`. Tune the S3-ready worker
+check wait window with:
 
 ```text
 KB_PARSE_S3_READY_TIMEOUT_SECONDS=900
